@@ -1,4 +1,4 @@
-Sylius Payzen Bundle
+Sylius Payzen Bundle by kiboko-labs
 ===========
 
 Sylius PayZen bundle via Payum
