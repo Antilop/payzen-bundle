@@ -238,6 +238,7 @@ class Api
         $resolver = new OptionsResolver();
         $resolver
             ->setRequired([
+                'endpoint',
                 'site_id',
                 'certificate',
                 'ctx_mode',
@@ -247,6 +248,7 @@ class Api
                 'count',
                 'period',
             ])
+            ->setAllowedTypes('endpoint', 'string')
             ->setAllowedTypes('site_id', 'string')
             ->setAllowedTypes('certificate', 'string')
             ->setAllowedValues('ctx_mode', ['TEST', 'PRODUCTION'])
