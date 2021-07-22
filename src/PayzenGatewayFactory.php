@@ -59,8 +59,8 @@ class PayzenGatewayFactory extends GatewayFactory
                 'directory'   => $config['directory'],
                 'debug'       => $config['debug'],
                 'n_times'     => $config['n_times'],
-                'count'       => $config['count'],
-                'period'      => $config['period'],
+                'count'       => intval($config['count']),
+                'period'      => intval($config['period']),
                 'endpoint'    => $config['endpoint'],
             ], $apiConfig);
 
