@@ -13,3 +13,5 @@ sylius:
                 period: Délai entre les paiements (en jours)
                 yes: Oui
                 no: Non
+    payzen_gateway_factory:
+        payzen_checkout: Payzen

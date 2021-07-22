@@ -4,6 +4,7 @@ namespace Kiboko\SyliusPayzenBundle\Form\Type;
 
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
+use Symfony\Component\Form\Extension\Core\Type\NumberType;
 use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Validator\Constraints\NotBlank;
@@ -58,10 +59,10 @@ final class PayzenGatewayConfigurationType extends AbstractType
                     'sylius.form.gateway_configuration.payzen.no' => false,
                 ),
             ])
-            ->add('count', TextType::class, [
+            ->add('count', NumberType::class, [
                 'label'       => 'sylius.form.gateway_configuration.payzen.count',
             ])
-            ->add('period', TextType::class, [
+            ->add('period', NumberType::class, [
                 'label'       => 'sylius.form.gateway_configuration.payzen.period',
             ])
         ;
