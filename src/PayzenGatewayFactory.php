@@ -5,9 +5,11 @@ namespace Kiboko\SyliusPayzenBundle;
 use Payum\Core\Bridge\Spl\ArrayObject;
 use Payum\Core\GatewayFactory;
 use Payum\Core\GatewayFactoryInterface;
+use Payum\Core\Model\GatewayConfigInterface;
 
 /**
  * Class PayzenGatewayFactory
+ *
  * @package Kiboko\SyliusPayzenBundle
  * @author  Etienne Dauvergne <contact@ekyna.com>
  */
@@ -36,16 +38,16 @@ class PayzenGatewayFactory extends GatewayFactory
             : [];
 
         $config->defaults([
-            'payum.factory_name'  => 'payzen',
+            'payum.factory_name' => 'payzen',
             'payum.factory_title' => 'Payzen',
 
-            'payum.action.capture'         => new Action\CaptureAction(),
+            'payum.action.capture' => new Action\CaptureAction(),
             'payum.action.convert_payment' => new Action\ConvertPaymentAction(),
-            'payum.action.api_request'     => new Action\Api\ApiRequestAction(),
-            'payum.action.api_response'    => new Action\Api\ApiResponseAction(),
-            'payum.action.sync'            => new Action\SyncAction(),
-            'payum.action.refund'          => new Action\RefundAction(),
-            'payum.action.status'          => new Action\StatusAction(),
+            'payum.action.api_request' => new Action\Api\ApiRequestAction(),
+            'payum.action.api_response' => new Action\Api\ApiResponseAction(),
+            'payum.action.sync' => new Action\SyncAction(),
+            'payum.action.refund' => new Action\RefundAction(),
+            'payum.action.status' => new Action\StatusAction(),
         ]);
 
         $defaultOptions = [];
@@ -53,15 +55,17 @@ class PayzenGatewayFactory extends GatewayFactory
 
         if (false == $config['payum.api']) {
             $defaultOptions['api'] = array_replace([
-                'site_id'     => $config['site_id'],
+                'site_id' => $config['site_id'],
                 'certificate' => $config['certificate'],
-                'ctx_mode'    => $config['ctx_mode'],
-                'directory'   => $config['directory'],
-                'debug'       => $config['debug'],
-                'n_times'     => $config['n_times'],
-                'count'       => $config['count'],
-                'period'      => $config['period'],
-                'endpoint'    => $config['endpoint'],
+                'ctx_mode' => $config['ctx_mode'],
+                'directory' => $config['directory'],
+                'debug' => $config['debug'],
+                'n_times' => $config['n_times'],
+                'count' => intval($config['count']),
+                'period' => intval($config['period']),
+                'endpoint' => $config['endpoint'],
+                'webservice_endpoint' => $config['webservice_endpoint'],
+                'timer_success_return' => $config['timer_success_return'],
             ], $apiConfig);
 
             $requiredOptions[] = 'api';

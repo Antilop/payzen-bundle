@@ -4,6 +4,7 @@ namespace Kiboko\SyliusPayzenBundle\Form\Type;
 
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
+use Symfony\Component\Form\Extension\Core\Type\NumberType;
 use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Validator\Constraints\NotBlank;
@@ -18,6 +19,12 @@ final class PayzenGatewayConfigurationType extends AbstractType
         $builder
             ->add('endpoint', TextType::class, [
                 'label'       => 'sylius.form.gateway_configuration.payzen.endpoint',
+                'constraints' => [
+                    new NotBlank(),
+                ],
+            ])
+            ->add('webservice_endpoint', TextType::class, [
+                'label'       => 'sylius.form.gateway_configuration.payzen.webservice_endpoint',
                 'constraints' => [
                     new NotBlank(),
                 ],
@@ -51,6 +58,9 @@ final class PayzenGatewayConfigurationType extends AbstractType
                     'No' => false,
                 ),
             ])
+            ->add('timer_success_return', NumberType::class, [
+                'label'       => 'sylius.form.gateway_configuration.payzen.timer_success',
+            ])
             ->add('n_times', ChoiceType::class, [
                 'label'       => 'sylius.form.gateway_configuration.payzen.n_times',
                 'choices'  => array(
@@ -58,10 +68,10 @@ final class PayzenGatewayConfigurationType extends AbstractType
                     'sylius.form.gateway_configuration.payzen.no' => false,
                 ),
             ])
-            ->add('count', TextType::class, [
+            ->add('count', NumberType::class, [
                 'label'       => 'sylius.form.gateway_configuration.payzen.count',
             ])
-            ->add('period', TextType::class, [
+            ->add('period', NumberType::class, [
                 'label'       => 'sylius.form.gateway_configuration.payzen.period',
             ])
         ;

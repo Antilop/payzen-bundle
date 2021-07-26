@@ -3,9 +3,10 @@ sylius:
         gateway_configuration:
             payzen:
                 endpoint: Endpoint Url
-                site_id: Site ID
-                certificate: Certifcate
-                ctx_mode: CTX mode
+                webservice_endpoint: Endpoint Url du webservice
+                site_id: ID du Site
+                certificate: Clé de l'environnement
+                ctx_mode: Environnement
                 directory: Directory
                 debug: Debug
                 n_times: Paiement en plusieurs fois
@@ -13,3 +14,6 @@ sylius:
                 period: Délai entre les paiements (en jours)
                 yes: Oui
                 no: Non
+                timer_success_return: Timer de retour au site (en secondes)
+    payzen_gateway_factory:
+        payzen_checkout: Payzen

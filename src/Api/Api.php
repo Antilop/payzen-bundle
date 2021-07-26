@@ -136,6 +136,7 @@ class Api
 
         $data['vads_site_id'] = $this->config['site_id'];
         $data['vads_ctx_mode'] = $this->config['ctx_mode'];
+        $data['vads_redirect_success_timeout'] = $this->config['timer_success_return'];
 
         $data['signature'] = $this->generateSignature($data);
 
@@ -211,6 +212,17 @@ class Api
     {
         return $this->config['endpoint'];
     }
+    /**
+     * Returns the endpoint url.
+     *
+     * @return string
+     *
+     * @throws \Exception
+     */
+    private function getWebserviceEndpoint()
+    {
+        return $this->config['webservice_endpoint'];
+    }
 
     /**
      * Check that the API has been configured.
@@ -238,6 +250,8 @@ class Api
         $resolver = new OptionsResolver();
         $resolver
             ->setRequired([
+                'endpoint',
+                'webservice_endpoint',
                 'site_id',
                 'certificate',
                 'ctx_mode',
@@ -246,7 +260,10 @@ class Api
                 'n_times',
                 'count',
                 'period',
+                'timer_success_return',
             ])
+            ->setAllowedTypes('endpoint', 'string')
+            ->setAllowedTypes('webservice_endpoint', 'string')
             ->setAllowedTypes('site_id', 'string')
             ->setAllowedTypes('certificate', 'string')
             ->setAllowedValues('ctx_mode', ['TEST', 'PRODUCTION'])
@@ -255,6 +272,7 @@ class Api
             ->setAllowedTypes('n_times', 'bool')
             ->setAllowedTypes('count', ['null', 'int'])
             ->setAllowedTypes('period', ['null', 'int'])
+            ->setAllowedTypes('timer_success_return', ['0', 'int'])
             ->setNormalizer('directory', function (Options $options, $value) {
                 return rtrim($value, DIRECTORY_SEPARATOR);
             });
@@ -321,7 +339,7 @@ class Api
                 'vads_redirect_error_message'   => null,
                 'vads_redirect_error_timeout'   => null,
                 'vads_redirect_success_message' => null,
-                'vads_redirect_success_timeout' => null,
+                'vads_redirect_success_timeout' => 0,
                 'vads_return_get_params'        => null,
                 'vads_return_mode'              => function (Options $options) {
                     /* TODO
@@ -331,7 +349,7 @@ class Api
                     Ce paramétrage n’impacte pas la transmission, ni les paramètres de transfert, de la réponse
                     de serveur à serveur (URL serveur commerçant).
                     */
-                    return 'POST';
+                    return 'GET';
                 },
                 'vads_return_post_params'       => null,
                 'vads_ship_to_city'             => null,
