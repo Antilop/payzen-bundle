@@ -34,7 +34,6 @@ class CaptureAction implements ActionInterface, GatewayAwareInterface, GenericTo
 
         $model = ArrayObject::ensureArrayObject($request->getModel());
 
-
         if ($request->getToken()) {
             // Done redirections
             $targetUrl = $request->getToken()->getTargetUrl();

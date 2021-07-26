@@ -23,6 +23,12 @@ final class PayzenGatewayConfigurationType extends AbstractType
                     new NotBlank(),
                 ],
             ])
+            ->add('webservice_endpoint', TextType::class, [
+                'label'       => 'sylius.form.gateway_configuration.payzen.webservice_endpoint',
+                'constraints' => [
+                    new NotBlank(),
+                ],
+            ])
             ->add('site_id', TextType::class, [
                 'label'       => 'sylius.form.gateway_configuration.payzen.site_id',
                 'constraints' => [
@@ -51,6 +57,9 @@ final class PayzenGatewayConfigurationType extends AbstractType
                     'Yes' => true,
                     'No' => false,
                 ),
+            ])
+            ->add('timer_success_return', NumberType::class, [
+                'label'       => 'sylius.form.gateway_configuration.payzen.timer_success',
             ])
             ->add('n_times', ChoiceType::class, [
                 'label'       => 'sylius.form.gateway_configuration.payzen.n_times',
