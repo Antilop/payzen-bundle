@@ -74,6 +74,24 @@ final class PayzenGatewayConfigurationType extends AbstractType
             ->add('period', NumberType::class, [
                 'label'       => 'sylius.form.gateway_configuration.payzen.period',
             ])
+            ->add('rest_endpoint', TextType::class, [
+                'label'  => 'sylius.form.gateway_configuration.payzen.rest_endpoint',
+                'constraints' => [
+                    new NotBlank(),
+                ],
+            ])
+            ->add('rest_password', TextType::class, [
+                'label'  => 'sylius.form.gateway_configuration.payzen.rest_password',
+                'constraints' => [
+                    new NotBlank(),
+                ],
+            ])
+            ->add('rest_pubkey', TextType::class, [
+                'label'  => 'sylius.form.gateway_configuration.payzen.rest_pubkey',
+                'constraints' => [
+                    new NotBlank(),
+                ],
+            ])
         ;
     }
 }

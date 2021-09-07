@@ -261,6 +261,9 @@ class Api
                 'count',
                 'period',
                 'timer_success_return',
+                'rest_endpoint',
+                'rest_password',
+                'rest_pubkey',
             ])
             ->setAllowedTypes('endpoint', 'string')
             ->setAllowedTypes('webservice_endpoint', 'string')
@@ -273,6 +276,9 @@ class Api
             ->setAllowedTypes('count', ['null', 'int'])
             ->setAllowedTypes('period', ['null', 'int'])
             ->setAllowedTypes('timer_success_return', ['0', 'int'])
+            ->setAllowedTypes('rest_endpoint', 'string')
+            ->setAllowedTypes('rest_password', 'string')
+            ->setAllowedTypes('rest_pubkey', 'string')
             ->setNormalizer('directory', function (Options $options, $value) {
                 return rtrim($value, DIRECTORY_SEPARATOR);
             });
