@@ -12,3 +12,6 @@ sylius:
                 period: Delay between payments (in days)
                 yes: Yes
                 no: No
+                rest_endpoint: Endpoint Url REST
+                rest_password: Password REST
+                rest_pubkey: Public key REST

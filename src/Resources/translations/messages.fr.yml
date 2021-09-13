@@ -15,5 +15,8 @@ sylius:
                 yes: Oui
                 no: Non
                 timer_success_return: Timer de retour au site (en secondes)
+                rest_endpoint: Endpoint Url REST
+                rest_password: Mot de passe REST
+                rest_pubkey: Clé publique REST
     payzen_gateway_factory:
         payzen_checkout: Payzen
