@@ -1,8 +1,8 @@
 <?php
 
-namespace Kiboko\SyliusPayzenBundle\Action;
+namespace Antilop\SyliusPayzenBundle\Action;
 
-use Kiboko\SyliusPayzenBundle\Request\Request;
+use Antilop\SyliusPayzenBundle\Request\Request;
 use Payum\Core\Action\ActionInterface;
 use Payum\Core\Bridge\Spl\ArrayObject;
 use Payum\Core\Exception\RequestNotSupportedException;
@@ -15,7 +15,7 @@ use Payum\Core\Security\GenericTokenFactoryAwareTrait;
 
 /**
  * Class CaptureAction
- * @package Kiboko\SyliusPayzenBundle\Action
+ * @package Antilop\SyliusPayzenBundle\Action
  * @author  Etienne Dauvergne <contact@ekyna.com>
  */
 class CaptureAction implements ActionInterface, GatewayAwareInterface, GenericTokenFactoryAwareInterface

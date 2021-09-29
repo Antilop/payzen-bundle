@@ -1,12 +1,12 @@
 <?php
 
-namespace Kiboko\SyliusPayzenBundle\Request;
+namespace Antilop\SyliusPayzenBundle\Request;
 
 use Payum\Core\Request\Generic;
 
 /**
  * Class Response
- * @package Kiboko\SyliusPayzenBundle\Request
+ * @package Antilop\SyliusPayzenBundle\Request
  * @author  Etienne Dauvergne <contact@ekyna.com>
  */
 class Response extends Generic
