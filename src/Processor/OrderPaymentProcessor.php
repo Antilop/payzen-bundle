@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Antilop\SyliusPayzenBundle\Processor;
 
+use Antilop\SyliusPayzenBundle\Factory\PayzenClientFactory;
+use App\Entity\Subscription\SubscriptionDraftOrder;
+use App\StateMachine\SubscriptionDraftOrderTransitions;
 use SM\Factory\FactoryInterface;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
@@ -23,12 +26,17 @@ final class OrderPaymentProcessor implements OrderProcessorInterface
     /** @var StateMachineFactoryInterface */
     private $stateMachineFactory;
 
+    /** @var PayzenClientFactory */
+    private $payzenClientFactory;
+
     public function __construct(
         OrderProcessorInterface $baseOrderPaymentProcessor,
-        StateMachineFactoryInterface $stateMachineFactory
+        StateMachineFactoryInterface $stateMachineFactory,
+        PayzenClientFactory $payzenClientFactory
     ) {
         $this->baseOrderPaymentProcessor = $baseOrderPaymentProcessor;
         $this->stateMachineFactory = $stateMachineFactory;
+        $this->payzenClientFactory = $payzenClientFactory;
     }
 
     private function applyTransition($payment, $transition): void
@@ -39,52 +47,47 @@ final class OrderPaymentProcessor implements OrderProcessorInterface
 
     public function process(OrderInterface $order): void
     {
-
         Assert::isInstanceOf($order, \Sylius\Component\Core\Model\OrderInterface::class);
-        /** @var PaymentInterface|null $payment */
 
-        if (0 === $order->getTotal()) {
-            $removablePayments = $order->getPayments()->filter(function (PaymentInterface $payment): bool {
-                return $payment->getState() === OrderPaymentStates::STATE_CART;
-            });
+        if ($order instanceof SubscriptionDraftOrder) {
+            if (0 === $order->getTotal()) {
+                $removablePayments = $order->getPayments()->filter(function (PaymentInterface $payment): bool {
+                    return $payment->getState() === OrderPaymentStates::STATE_CART;
+                });
 
-            foreach ($removablePayments as $payment) {
-                $order->removePayment($payment);
-            }
-
-            return;
-        }
-
-        $lastPayment = $order->getLastPayment(PaymentInterface::STATE_NEW);
-        if ($lastPayment !== null && $this->getFactoryName($lastPayment) === 'payzen') {
-            $this->applyTransition($lastPayment, PaymentTransitions::TRANSITION_PROCESS);
-            $this->applyTransition($lastPayment, PaymentTransitions::TRANSITION_COMPLETE);
-            $order->setPaymentState(OrderPaymentStates::STATE_PAID);
-            $order->setState(OrderInterface::STATE_FULFILLED);
-        }
-
-        if (null !== $lastPayment) {
-            $lastPayment->setCurrencyCode($order->getCurrencyCode());
-            $lastPayment->setAmount($order->getTotal());
-
-            return;
-        }
-
-        $paymentCart = $order->getLastPayment(PaymentInterface::STATE_CART);
-        if (null !== $paymentCart) {
-            $details = $paymentCart->getDetails();
-            if (!isset($details['success']) && !empty($details['token'])) {
-                $success = true;
-                if ($details['token'] == 'TOKEN_NOK') {
-                    $success = false;
+                foreach ($removablePayments as $payment) {
+                    $order->removePayment($payment);
                 }
 
-                $paymentCart->setDetails([
-                    'token' => $details['token'],
-                    'success' => $success
-                ]);
+                return;
+            }
+
+            $lastPayment = $order->getLastPayment(PaymentInterface::STATE_NEW);
+            if ($lastPayment !== null && $this->getFactoryName($lastPayment) === 'payzen') {
+                $payzenClient = $this->payzenClientFactory->create();
+                $result = $payzenClient->processPayment($order);
+                $lastPayment->setDetails($result);
+
+                if (isset($result['success']) && boolval($result['success'])) {
+                    $this->applyTransition($lastPayment, PaymentTransitions::TRANSITION_PROCESS);
+                    $this->applyTransition($lastPayment, PaymentTransitions::TRANSITION_COMPLETE);
+                    $order->setPaymentState(OrderPaymentStates::STATE_PAID);
+                    $order->setState(OrderInterface::STATE_FULFILLED);
+                } else {
+                    $stateMachine = $this->stateMachineFactory->get($order, SubscriptionDraftOrderTransitions::GRAPH);
+                    $stateMachine->apply(SubscriptionDraftOrderTransitions::TRANSITION_PAYMENT_FAIL);
+                }
+            }
+
+
+            if ($lastPayment !== null) {
+                $lastPayment->setCurrencyCode($order->getCurrencyCode());
+                $lastPayment->setAmount($order->getTotal());
+
+                return;
             }
         }
+
 
         $this->baseOrderPaymentProcessor->process($order);
     }

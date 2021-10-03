@@ -10,8 +10,17 @@ services:
         arguments: [Antilop\SyliusPayzenBundle\PayzenGatewayFactory]
         tags:
             - { name: payum.gateway_factory_builder, factory: payzen }
+    antilop.payment.payzen.factory:
+        class: Antilop\SyliusPayzenBundle\Factory\PayzenClientFactory
+        arguments: ['@sylius.repository.payment_method']
 
     antilop.payment.payzen.processor:
         class: Antilop\SyliusPayzenBundle\Processor\OrderPaymentProcessor
         decorates: sylius.order_processing.order_payment_processor.checkout
-        arguments: ['@.inner', '@sm.factory']
+        arguments: ['@.inner', '@sm.factory', '@antilop.payment.payzen.factory']
+
+    Antilop\SyliusPayzenBundle\EventListener\UpdateBankDetailListener:
+        decorates: App\EventListener\Subscription\BankDetailListener
+        arguments: ['@sm.factory']
+
+

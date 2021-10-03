@@ -1,14 +1,15 @@
 <?php
 
-namespace App\Api\Payzen;
+namespace Antilop\SyliusPayzenBundle\Api;
 
-use App\Entity\Payment\Payment;
+use App\Entity\Subscription\SubscriptionDraftOrder;
 use DOMDocument;
 use DOMXPath;
 use SoapFault;
 use SoapClient;
 use SoapHeader;
 use DateTime;
+use App\Entity\Subscription\Subscription;
 
 /**
  * @link https://sogecommerce.societegenerale.eu/doc/fr-FR/webservices-payment/implementation-webservices-v5/tla1414490232969.pdf Documentation de l'API
@@ -16,26 +17,24 @@ use DateTime;
 class PayzenClient
 {
     protected $client;
-    protected $key;
+    protected $certificate;
     protected $siteId;
-    protected $wsdl;
+    protected $webserviceEndpoint;
     protected $requestId;
     protected $authToken;
-    protected $environment;
+    protected $ctxMode;
 
     /**
      * PayzenClient constructor.
      *
      * @param Payment $payment
      */
-    public function __construct(Payment $payment)
+    public function __construct($webserviceEndpoint, $siteId, $certificate, $ctxMode)
     {
-        $config = $payment->getMethod()->getGatewayConfig()->getConfig();
-
-        $this->wsdl = $config['webservice_endpoint'];
-        $this->siteId = $config['site_id'];
-        $this->key = $config['certificate'];
-        $this->environment = $config['ctx_mode'];
+        $this->webserviceEndpoint = $webserviceEndpoint;
+        $this->siteId = $siteId;
+        $this->certificate = $certificate;
+        $this->ctxMode = $ctxMode;
     }
 
     public function createPayment(createPayment $createPayment)
@@ -66,7 +65,7 @@ class PayzenClient
         }
 
         //Calcul du jeton d'authentification de la réponse
-        $authTokenResponse = base64_encode(hash_hmac('sha256', $responseHeader['timestamp'] . $responseHeader['requestId'], $this->key, true));
+        $authTokenResponse = base64_encode(hash_hmac('sha256', $responseHeader['timestamp'] . $responseHeader['requestId'], $this->certificate, true));
         if ($authTokenResponse !== $responseHeader['authToken']) {
             $message = 'Erreur interne rencontrée : erreur de calcul ou tentative de fraude';
         } else {
@@ -129,7 +128,7 @@ class PayzenClient
     {
         // Exemple d'Initialisation d'un client SOAP sans proxy
         $this->client = new SoapClient(
-            $this->wsdl,
+            $this->webserviceEndpoint,
             $options = array(
                 'trace' => 1,
                 'exceptions' => 0,
@@ -140,8 +139,8 @@ class PayzenClient
 
         $this->requestId = $this->genUuid();
         $timestamp = gmdate("Y-m-d\TH:i:s\Z");
-        $this->authToken = base64_encode(hash_hmac('sha256', $this->requestId . $timestamp, $this->key, true));
-        $this->setHeaders($this->siteId, $this->requestId, $timestamp, $this->environment, $this->key);
+        $this->authToken = base64_encode(hash_hmac('sha256', $this->requestId . $timestamp, $this->certificate, true));
+        $this->setHeaders($this->siteId, $this->requestId, $timestamp, $this->ctxMode, $this->certificate);
     }
 
     public function genUuid()
@@ -169,9 +168,45 @@ class PayzenClient
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 
-    public function generateToken(createTokenFromTransaction $createTokenRequest)
+    public function generateToken(Subscription $subscription)
     {
         $result = [];
+
+        $order = $subscription->getOrderOrigin();
+        $customer = $order->getCustomer();
+        $payment = $order->getLastPayment();
+        $paymentDetail = $payment->getDetails();
+
+        $sogecommerceUuid = $paymentDetail['vads_trans_uuid'];
+        $expiryMonth = intval($paymentDetail['vads_expiry_month']);
+        $expiryYear = intval($paymentDetail['vads_expiry_year']);
+        $expiryDate = new DateTime();
+        $expiryDate->setTime(0, 0, 0);
+        $expiryDate->setDate($expiryYear, $expiryMonth, 1);
+
+        $commonRequest = new commonRequest();
+        $commonRequest->submissionDate = $order->getCreatedAt();
+
+        $queryRequest = new queryRequest();
+        $queryRequest->uuid = $sogecommerceUuid;
+
+        $cardRequest = new cardRequest();
+        $cardRequest->paymentToken = 'subscription_' . $subscription->getId() . '_' . uniqid();
+
+        $billingDetailsRequest = new billingDetailsRequest();
+        $billingDetailsRequest->email = $customer->getEmail();
+        $billingDetailsRequest->firstName = $customer->getFirstName();
+        $customerRequest = new customerRequest();
+        $customerRequest->billingDetails = $billingDetailsRequest;
+
+        $createTokenRequest = new createTokenFromTransaction();
+        $createTokenRequest->commonRequest = $commonRequest;
+        $createTokenRequest->queryRequest = $queryRequest;
+        $createTokenRequest->cardRequest = $cardRequest;
+        $createTokenRequest->customerRequest = $customerRequest;
+
+        $createTokenRequest->commonRequest->submissionDate = $createTokenRequest->commonRequest->submissionDate->format(\DateTime::W3C);
+
 
         $message = '';
         $responseCode = null;
@@ -199,7 +234,7 @@ class PayzenClient
         }
 
         // Calcul du jeton d'authentification de la réponse
-        $authTokenResponse = base64_encode(hash_hmac('sha256', $responseHeader['timestamp'] . $responseHeader['requestId'], $this->key, true));
+        $authTokenResponse = base64_encode(hash_hmac('sha256', $responseHeader['timestamp'] . $responseHeader['requestId'], $this->certificate, true));
 
         if ($authTokenResponse !== $responseHeader['authToken']) {
             // Erreur de calcul ou tentative de fraude
@@ -223,6 +258,7 @@ class PayzenClient
         $result['response_code'] = $responseCode;
         $result['message'] = $message;
         $result['payment_token'] = $paymentToken;
+        $result['expiry_date'] = $expiryDate;
 
         return $result;
     }
@@ -332,33 +368,86 @@ class PayzenClient
             '30' => 'Erreur de format',
             '31' => 'Identifiant de l’organisme acquéreur inconnu',
             '33' => 'Date de validité de la carte dépassée',
-            '34' => 'Suspicion de fraude	 ',
-            '38' => 'Date de validité de la carte dépassée	 ',
-            '41' => 'Carte perdue	 ',
-            '43' => 'Carte volée	 ',
-            '51' => 'Provision insuffisante ou crédit dépassé	 ',
-            '54' => 'Date de validité de la carte dépassée	 ',
-            '55' => 'Code confidentiel erroné	 ',
-            '56' => 'Carte absente du fichier	 ',
-            '57' => 'Transaction non permise à ce porteur	 ',
-            '58' => 'Transaction non permise à ce porteur	 ',
-            '59' => 'Suspicion de fraude	 ',
-            '60' => 'L’accepteur de carte doit contacter l’acquéreur	 ',
-            '61' => 'Montant de retrait hors limite	 ',
-            '63' => 'Règles de sécurité non respectées	 ',
-            '68' => 'Réponse non parvenue ou reçue trop tard	 ',
-            '75' => 'Nombre d’essais code confidentiel dépassé	 ',
-            '76' => 'Porteur déjà en opposition, ancien enregistrement conservé	 ',
-            '90' => 'Arrêt momentané du système	 ',
-            '91' => 'Émetteur de cartes inaccessible	 ',
-            '94' => 'Transaction dupliquée	 ',
-            '96' => 'Mauvais fonctionnement du système	 ',
-            '97' => 'Échéance de la temporisation de surveillance globale	 ',
-            '98' => 'Serveur indisponible routage réseau demandé à nouveau	 ',
-            '99' => 'Incident domaine initiateur	 ',
+            '34' => 'Suspicion de fraude',
+            '38' => 'Date de validité de la carte dépassée',
+            '41' => 'Carte perdue',
+            '43' => 'Carte volée',
+            '51' => 'Provision insuffisante ou crédit dépassé',
+            '54' => 'Date de validité de la carte dépassée',
+            '55' => 'Code confidentiel erroné',
+            '56' => 'Carte absente du fichier',
+            '57' => 'Transaction non permise à ce porteur',
+            '58' => 'Transaction non permise à ce porteur',
+            '59' => 'Suspicion de fraude',
+            '60' => 'L’accepteur de carte doit contacter l’acquéreur',
+            '61' => 'Montant de retrait hors limite',
+            '63' => 'Règles de sécurité non respectées',
+            '68' => 'Réponse non parvenue ou reçue trop tard',
+            '75' => 'Nombre d’essais code confidentiel dépassé',
+            '76' => 'Porteur déjà en opposition, ancien enregistrement conservé',
+            '90' => 'Arrêt momentané du système',
+            '91' => 'Émetteur de cartes inaccessible',
+            '94' => 'Transaction dupliquée',
+            '96' => 'Mauvais fonctionnement du système',
+            '97' => 'Échéance de la temporisation de surveillance globale',
+            '98' => 'Serveur indisponible routage réseau demandé à nouveau',
+            '99' => 'Incident domaine initiateur',
 
         ];
 
         return $codeDetail[$code];
+    }
+
+    /**
+     * Prépare les différents objets nécessaires pour utiliser l'api payzen (sogecommerce)
+     *
+     * @return array
+     */
+    public function processPayment(SubscriptionDraftOrder $order)
+    {
+        $subscription = $order->getSubscription();
+
+        if (is_null($subscription)) {
+            return [
+                'success' => false,
+                'message' => 'Aucun abonnement associé à la commande'
+            ];
+        }
+
+        $customer = $order->getCustomer();
+
+        $amount = $order->getTotal();
+
+        $commonRequest = new commonRequest();
+        $commonRequest->submissionDate = new DateTime('now');
+
+        $paymentRequest = new paymentRequest();
+        $amount = $amount * 100;
+        $paymentRequest->amount = intval("$amount");
+        $paymentRequest->currency = 978;
+
+        $orderRequest = new orderRequest();
+        $orderRequest->orderId = $order->getNumber();
+
+        $cardRequest = new cardRequest();
+        $cardRequest->paymentToken = $subscription->getCardToken();
+
+        $billingDetails = new billingDetailsRequest();
+        $billingDetails->email = $customer->getEmail();
+        $billingDetails->firstName = $customer->getFirstName();
+        $billingDetails->lastName = $customer->getLastName();
+
+        $customerRequest = new customerRequest;
+        $customerRequest->billingDetails = $billingDetails;
+
+        $createPayment = new createPayment;
+        $createPayment->paymentRequest = $paymentRequest;
+        $createPayment->orderRequest = $orderRequest;
+        $createPayment->cardRequest = $cardRequest;
+        $createPayment->customerRequest = $customerRequest;
+
+        $payment_result = $this->createPayment($createPayment);
+
+        return $payment_result;
     }
 }

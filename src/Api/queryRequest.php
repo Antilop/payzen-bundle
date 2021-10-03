@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Api\Payzen;
+namespace Antilop\SyliusPayzenBundle\Api;
 
 // @codingStandardsIgnoreLine - Modèle distant des données pour le WS SOAP payzen
 class queryRequest
