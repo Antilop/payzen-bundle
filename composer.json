@@ -6,13 +6,24 @@
   "license": "MIT",
   "authors": [
     {
-      "name": "Xavier Besson",
-      "email": "xavier@kiboko.fr",
-      "homepage": "https://github.com/xabe20"
+      "name": "Grégoire BELORGEY",
+      "email": "gregoire@antilop.fr"
     },
     {
-      "name": "Etienne Dauvergne",
-      "homepage": "http://ekyna.com"
+      "name": "Stéphanie TILIN",
+      "email": "stephanie@antilop.fr"
+    },
+    {
+      "name": "Pierre FAYOL",
+      "email": "pierre@antilop.fr"
+    },
+    {
+      "name": "Léo DEDIT",
+      "email": "leo@antilop.fr"
+    },
+    {
+      "name": "Yoan DELMAIRE",
+      "email": "yoan@antilop.fr"
     }
   ],
   "require": {
@@ -21,7 +32,7 @@
   },
   "autoload": {
     "psr-4": {
-      "Kiboko\\SyliusPayzenBundle\\": "src/"
+      "Antilop\\SyliusPayzenBundle\\": "src/"
     }
   }
 }
