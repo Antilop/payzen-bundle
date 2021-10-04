@@ -1,6 +1,6 @@
 <?php
 
-namespace Kiboko\SyliusPayzenBundle;
+namespace Antilop\SyliusPayzenBundle;
 
 use Payum\Core\Bridge\Spl\ArrayObject;
 use Payum\Core\GatewayFactory;
@@ -10,7 +10,7 @@ use Payum\Core\Model\GatewayConfigInterface;
 /**
  * Class PayzenGatewayFactory
  *
- * @package Kiboko\SyliusPayzenBundle
+ * @package Antilop\SyliusPayzenBundle
  * @author  Etienne Dauvergne <contact@ekyna.com>
  */
 class PayzenGatewayFactory extends GatewayFactory
@@ -66,6 +66,9 @@ class PayzenGatewayFactory extends GatewayFactory
                 'endpoint' => $config['endpoint'],
                 'webservice_endpoint' => $config['webservice_endpoint'],
                 'timer_success_return' => $config['timer_success_return'],
+                'rest_endpoint' => $config['rest_endpoint'],
+                'rest_password' => $config['rest_password'],
+                'rest_pubkey' => $config['rest_pubkey'],
             ], $apiConfig);
 
             $requiredOptions[] = 'api';

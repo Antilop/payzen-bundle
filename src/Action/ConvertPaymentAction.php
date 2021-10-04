@@ -1,6 +1,6 @@
 <?php
 
-namespace Kiboko\SyliusPayzenBundle\Action;
+namespace Antilop\SyliusPayzenBundle\Action;
 
 use Payum\Core\Action\ActionInterface;
 use Payum\Core\Bridge\Spl\ArrayObject;
@@ -14,7 +14,7 @@ use Payum\Core\Request\GetCurrency;
 
 /**
  * Class ConvertPaymentAction
- * @package Kiboko\SyliusPayzenBundle\Action
+ * @package Antilop\SyliusPayzenBundle\Action
  * @author  Etienne Dauvergne <contact@ekyna.com>
  */
 class ConvertPaymentAction implements ActionInterface, GatewayAwareInterface
@@ -57,7 +57,7 @@ class ConvertPaymentAction implements ActionInterface, GatewayAwareInterface
         if (false == $model['vads_cust_email']) {
             $model['vads_cust_email'] = $order->getCustomer()->getEmail();
         }
-        
+
         if (isset($gatewayConfig['n_times']) && $gatewayConfig['n_times']) {
             $count = (int) $gatewayConfig['count'];
             $period = (int) $gatewayConfig['period'];

@@ -1,8 +1,8 @@
 <?php
 
-namespace Kiboko\SyliusPayzenBundle\Action\Api;
+namespace Antilop\SyliusPayzenBundle\Action\Api;
 
-use Kiboko\SyliusPayzenBundle\Api\Api;
+use Antilop\SyliusPayzenBundle\Api\Api;
 use Payum\Core\Action\ActionInterface;
 use Payum\Core\ApiAwareInterface;
 use Payum\Core\Exception\UnsupportedApiException;
@@ -13,7 +13,7 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Class AbstractApiAction
- * @package Kiboko\SyliusPayzenBundle\Action\Api
+ * @package Antilop\SyliusPayzenBundle\Action\Api
  * @author  Etienne Dauvergne <contact@ekyna.com>
  */
 abstract class AbstractApiAction implements ActionInterface, GatewayAwareInterface, ApiAwareInterface, LoggerAwareInterface

@@ -1,15 +1,15 @@
 <?php
 
-namespace Kiboko\SyliusPayzenBundle\Action\Api;
+namespace Antilop\SyliusPayzenBundle\Action\Api;
 
-use Kiboko\SyliusPayzenBundle\Request\Request;
+use Antilop\SyliusPayzenBundle\Request\Request;
 use Payum\Core\Bridge\Spl\ArrayObject;
 use Payum\Core\Exception\RequestNotSupportedException;
 use Payum\Core\Reply\HttpRedirect;
 
 /**
  * Class RequestAction
- * @package Kiboko\SyliusPayzenBundle\Action\Api
+ * @package Antilop\SyliusPayzenBundle\Action\Api
  * @author  Etienne Dauvergne <contact@ekyna.com>
  */
 class ApiRequestAction extends AbstractApiAction

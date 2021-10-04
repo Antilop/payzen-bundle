@@ -1,4 +1,4 @@
-Sylius Payzen Bundle by kiboko-labs
+Sylius Payzen Bundle by Antilop
 ===========
 
 Sylius PayZen bundle via Payum
@@ -9,32 +9,30 @@ Sylius PayZen bundle via Payum
 1. Install this bundle:
 
 ```bash
-$ composer require kiboko/sylius-payzen-bundle
+$ composer require antilop/sylius-payzen-bundle
 ```
 
 2. Configure new payment method in Sylius Admin
 
 ### Complementary documentation
 
-- [Sylius Payments](http://docs.sylius.org/en/latest/book/orders/payments.html)
-- [Payum](https://github.com/Payum/Payum/blob/master/docs/index.md)
-- [Ekyna/PayumPayzenBundle](https://github.com/ekyna/PayumPayzenBundle)
+- [Kiboko/PayzenBundle](https://github.com/kiboko-labs/payzen-bundle)
 
 
 # Installation manuelle (old)
 
-* Copie le contenu de `src` dans `src/Kiboko/Bundle/SyliusPayzenBundle`
+* Copie le contenu de `src` dans `src/Antilop/Bundle/SyliusPayzenBundle`
 
 * Déclarer le bundle dans `config/bundles.php` :
 
 ```
-Kiboko\Bundle\SyliusPayzenBundle\KibokoSyliusPayzenBundle::class => ['all' => true],
+Antilop\Bundle\SyliusPayzenBundle\AntilopSyliusPayzenBundle::class => ['all' => true],
 ```
 
  
 * Ajouter dans le fichier `composer.json` dans la partie `psr-4` :
 ```
-"Kiboko\\Bundle\\": "src/Kiboko/Bundle/",
+"Antilop\\Bundle\\": "src/Antilop/Bundle/",
 ```
 
 ### Build archive
@@ -50,7 +48,7 @@ In your project, you can add the plugin with
         "payzen-integration": {
             "type": "package",
             "package": {
-                "name": "kiboko/sylius-payzen-bundle",
+                "name": "antilop/sylius-payzen-bundle",
                 "version": "0.1.0",
                 "dist": {
                     "url": "{PATH_TO_YOUR_ARCHIVE}/sylius-payzenbundle-0.1.0.tar",
@@ -61,4 +59,4 @@ In your project, you can add the plugin with
     }
 ```
 
-And run `composer require kiboko/sylius-payzen-bundle`
+And run `composer require antilop/sylius-payzen-bundle`

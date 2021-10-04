@@ -1,6 +1,6 @@
 <?php
 
-namespace Kiboko\SyliusPayzenBundle\Action;
+namespace Antilop\SyliusPayzenBundle\Action;
 
 use Payum\Core\Action\ActionInterface;
 use Payum\Core\Bridge\Spl\ArrayObject;
@@ -9,7 +9,7 @@ use Payum\Core\Request\GetStatusInterface;
 
 /**
  * Class StatusAction
- * @package Kiboko\SyliusPayzenBundle\Action
+ * @package Antilop\SyliusPayzenBundle\Action
  * @author  Etienne Dauvergne <contact@ekyna.com>
  */
 class StatusAction implements ActionInterface

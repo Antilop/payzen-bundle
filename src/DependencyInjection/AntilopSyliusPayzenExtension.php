@@ -1,13 +1,13 @@
 <?php
 
-namespace Kiboko\SyliusPayzenBundle\DependencyInjection;
+namespace Antilop\SyliusPayzenBundle\DependencyInjection;
 
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
 
-final class KibokoSyliusPayzenExtension extends Extension
+final class AntilopSyliusPayzenExtension extends Extension
 {
     /**
      * {@inheritdoc}
