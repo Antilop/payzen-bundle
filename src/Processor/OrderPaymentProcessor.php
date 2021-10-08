@@ -63,7 +63,7 @@ final class OrderPaymentProcessor implements OrderProcessorInterface
             }
 
             $lastPayment = $order->getLastPayment(PaymentInterface::STATE_NEW);
-            if ($lastPayment !== null && $this->getFactoryName($lastPayment) === 'payzen') {
+            if ($lastPayment !== null && $lastPayment->getMethod()->getCode() === 'PAYZEN') {
                 $payzenClient = $this->payzenClientFactory->create();
                 $result = $payzenClient->processPayment($order);
                 $lastPayment->setDetails($result);
@@ -79,7 +79,6 @@ final class OrderPaymentProcessor implements OrderProcessorInterface
                 }
             }
 
-
             if ($lastPayment !== null) {
                 $lastPayment->setCurrencyCode($order->getCurrencyCode());
                 $lastPayment->setAmount($order->getTotal());
@@ -87,7 +86,6 @@ final class OrderPaymentProcessor implements OrderProcessorInterface
                 return;
             }
         }
-
 
         $this->baseOrderPaymentProcessor->process($order);
     }
