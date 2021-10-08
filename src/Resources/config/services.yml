@@ -20,7 +20,8 @@ services:
         arguments: ['@.inner', '@sm.factory', '@antilop.payment.payzen.factory']
 
     Antilop\SyliusPayzenBundle\EventListener\UpdateBankDetailListener:
-        decorates: App\EventListener\Subscription\BankDetailListener
         arguments: ['@sm.factory']
+        tags:
+            - { name: kernel.event_listener, event: app.subscription.update_bank_detail.payzen.card_token, method: updateBankDetail }
 
 
