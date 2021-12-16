@@ -10,6 +10,7 @@ services:
         arguments: [Antilop\SyliusPayzenBundle\PayzenGatewayFactory]
         tags:
             - { name: payum.gateway_factory_builder, factory: payzen }
+
     antilop.payment.payzen.factory:
         class: Antilop\SyliusPayzenBundle\Factory\PayzenClientFactory
         arguments: ['@sylius.repository.payment_method']
@@ -24,4 +25,6 @@ services:
         tags:
             - { name: kernel.event_listener, event: app.subscription.update_bank_detail.payzen.card_token, method: updateBankDetail }
 
-
+    antilop.payment.payzen.sdk.factory:
+        class: Antilop\SyliusPayzenBundle\Factory\PayzenSdkClientFactory
+        arguments: ['@sylius.repository.payment_method', '@payum']
