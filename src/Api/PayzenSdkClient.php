@@ -83,7 +83,12 @@ class PayzenSdkClient
         $customer = $order->getCustomer();
         $shippingAddress = $order->getShippingAddress();
         $billingAddress = $order->getBillingAddress();
-        $notifyToken = $this->payum->getTokenFactory()->createNotifyToken('payzen');
+        $lastPayment = $order->getLastPayment();
+        $paymentModel = $this->payum->getStorage('App\Entity\Payment\Payment')->find($lastPayment->getId());
+        $notifyToken = $this->payum->getTokenFactory()->createNotifyToken(
+            'payzen',
+            $paymentModel
+        );
 
         return [
             'amount' => $order->getTotal(),
