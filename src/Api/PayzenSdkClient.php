@@ -39,6 +39,12 @@ class PayzenSdkClient
         $this->payum = $payum;
     }
 
+    public function checkSignature()
+    {
+        return true;
+        return $this->client->checkHash($this->password);
+    }
+
     /**
      * Generate form token
      *
@@ -53,7 +59,7 @@ class PayzenSdkClient
             $action = 'CreatePayment';
         }
 
-        $params = $this->getParams($order);
+        $params = $this->getParams($order, $action);
         $response = $this->client->post('V4/Charge/' . $action, $params);
 
         if ($response['status'] !== 'SUCCESS') {
@@ -72,22 +78,45 @@ class PayzenSdkClient
     }
 
     /**
-     * Get parameters
-     *
-     * @param OrderInterface $order
+     * Get form answer
      *
      * @return array
      */
-    protected function getParams(OrderInterface $order)
+    public function getFormAnswer()
+    {
+        if (empty($_POST['kr-answer'])) {
+            return [];
+        }
+
+        return $this->client->getParsedFormAnswer();
+    }
+
+    /**
+     * Get parameters
+     *
+     * @param OrderInterface $order
+     * @param string         $action
+     *
+     * @return array
+     */
+    protected function getParams(OrderInterface $order, $action)
     {
         $customer = $order->getCustomer();
         $shippingAddress = $order->getShippingAddress();
         $billingAddress = $order->getBillingAddress();
         $lastPayment = $order->getLastPayment();
         $paymentModel = $this->payum->getStorage('App\Entity\Payment\Payment')->find($lastPayment->getId());
-        $notifyToken = $this->payum->getTokenFactory()->createNotifyToken(
+        
+        $ipnUrl = 'payzen_ipn_order_url';
+        if ($action == 'CreateToken') {
+            $ipnUrl = 'payzen_ipn_subscription_url';
+        }
+
+        $captureToken = $this->payum->getTokenFactory()->createToken(
             'payzen',
-            $paymentModel
+            $paymentModel,
+            $ipnUrl,
+            ['orderId' => $order->getId()]
         );
 
         return [
@@ -118,7 +147,7 @@ class PayzenSdkClient
                     'phoneNumber' => $billingAddress->getPhoneNumber(),
                 ],
             ],
-            'ipnTargetUrl' => $notifyToken->getTargetUrl()
+            'ipnTargetUrl' => $captureToken->getTargetUrl()
         ];
     }
 

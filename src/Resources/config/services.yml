@@ -28,3 +28,14 @@ services:
     antilop.payment.payzen.sdk.factory:
         class: Antilop\SyliusPayzenBundle\Factory\PayzenSdkClientFactory
         arguments: ['@sylius.repository.payment_method', '@payum']
+
+    antilop.payzen.controller.ipn:
+        public: true
+        class: 'Antilop\SyliusPayzenBundle\Controller\IpnController'
+        arguments:
+            - '@payum'
+            - '@sylius.repository.order'
+            - '@antilop.payment.payzen.sdk.factory'
+            - '@sm.factory'
+            - '@app.service.subscription'
+            - '@doctrine.orm.default_entity_manager'
