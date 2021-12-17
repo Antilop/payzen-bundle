@@ -40,7 +40,6 @@ class PayzenGatewayFactory extends GatewayFactory
         $config->defaults([
             'payum.factory_name' => 'payzen',
             'payum.factory_title' => 'Payzen',
-
             'payum.action.capture' => new Action\CaptureAction(),
             'payum.action.convert_payment' => new Action\ConvertPaymentAction(),
             'payum.action.api_request' => new Action\Api\ApiRequestAction(),
@@ -48,6 +47,7 @@ class PayzenGatewayFactory extends GatewayFactory
             'payum.action.sync' => new Action\SyncAction(),
             'payum.action.refund' => new Action\RefundAction(),
             'payum.action.status' => new Action\StatusAction(),
+            'payum.action.notify' => new Action\NotifyAction(),
         ]);
 
         $defaultOptions = [];
