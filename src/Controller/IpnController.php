@@ -102,7 +102,7 @@ final class IpnController
             }
         }
 
-        return new Response('Invalid form anwser from payzen');
+        return new Response('Invalid form answer from payzen');
     }
 
     public function updateSubscriptionBankDetailsAction(Request $request, $orderId): Response
@@ -154,7 +154,7 @@ final class IpnController
             }
         }
 
-        return new Response('Invalid form anwser from payzen');
+        return new Response('Invalid form answer from payzen');
     }
 
     protected function makeUniformPaymentDetails($formAnswer)
