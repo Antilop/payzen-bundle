@@ -6,7 +6,7 @@ payzen_ipn_order_url:
         _controller: antilop.payzen.controller.ipn:completeOrderAction
 
 payzen_ipn_subscription_url:
-    path: /payzen-ipn/subscription/{orderId}
+    path: /payzen-ipn/{orderId}
     methods: [GET, POST]
     defaults:
         _controller: antilop.payzen.controller.ipn:updateSubscriptionBankDetailsAction
