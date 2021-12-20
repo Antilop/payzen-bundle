@@ -3,9 +3,7 @@
 namespace Antilop\SyliusPayzenBundle\Controller;
 
 use Antilop\SyliusPayzenBundle\Factory\PayzenSdkClientFactory;
-use App\Entity\Subscription\SubscriptionState;
 use App\Service\SubscriptionService;
-use DateTime;
 use Doctrine\ORM\EntityManager;
 use Payum\Core\Payum;
 use SM\Factory\FactoryInterface;
@@ -63,6 +61,11 @@ final class IpnController
             throw new NotFoundHttpException(sprintf('Order with id "%s" does not exist.', $orderId));
         }
 
+        $token = $this->payum->getHttpRequestVerifier()->verify($request);
+        if (empty($token)) {
+            throw new NotFoundHttpException(sprintf('Invalid security token for order with id "%s".', $orderId));
+        }
+
         $payzenClient = $this->payzenSdkClientFactory->create();
         if (!$payzenClient->checkSignature()) {
             throw new NotFoundHttpException(sprintf('Invalid signature for Order "%s".', $order->getId()));
@@ -85,16 +88,21 @@ final class IpnController
                     $stateMachine = $this->factory->get($order, OrderCheckoutTransitions::GRAPH);
                     $stateMachine->apply(OrderCheckoutTransitions::TRANSITION_COMPLETE);
 
-                    $payment->setDetails($formAnswer);
+                    $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
+                    $payment->setDetails($paymentDetails);
 
                     $this->em->persist($payment);
                     $this->em->persist($order);
                     $this->em->flush();
+
+                    $this->payum->getHttpRequestVerifier()->invalidate($token);
+
+                    return new Response('OK');
                 }
             }
         }
 
-        return new Response('OK');
+        return new Response('Invalid form answer from payzen');
     }
 
     public function updateSubscriptionBankDetailsAction(Request $request, $orderId): Response
@@ -111,32 +119,63 @@ final class IpnController
             throw new NotFoundHttpException(sprintf('Invalid signature for Order "%s".', $order->getId()));
         }
 
+        $token = $this->payum->getHttpRequestVerifier()->verify($request);
+        if (empty($token)) {
+            throw new NotFoundHttpException(sprintf('Invalid security token for order with id "%s".', $orderId));
+        }
+
         $rawAnswer = $payzenClient->getFormAnswer();
         if (!empty($rawAnswer)) {
             $formAnswer = $rawAnswer['kr-answer'];
             $orderStatus = $formAnswer['orderStatus'];
 
             if ($orderStatus === 'PAID') {
-                $subscription = $order->getSubscription();
-                $month = $formAnswer['transactions'][0]['transactionDetails']['cardDetails']['expiryMonth'];
-                $year = $formAnswer['transactions'][0]['transactionDetails']['cardDetails']['expiryYear'];
-                $date = $year . '-' . str_pad($month, 2, '0',  STR_PAD_LEFT) . '-01';
-                $subscription->setCardExpiration(new DateTime($date));
-
                 $payment = $order->getLastPayment(PaymentInterface::STATE_NEW);
-                $payment->setDetails($formAnswer);
+                $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
+                $payment->setDetails($paymentDetails);
 
-                if (SubscriptionState::STATE_PAYMENT_FAILED === $subscription->getState()) {
-                    $this->subscriptionService->paymentRetryOnFail($subscription);
+                $subscription = $order->getSubscription();
+                if (!empty($subscription)) {
+                    $this->subscriptionService->updateCardExpiration(
+                        $subscription,
+                        intval($paymentDetails['vads_expiry_month']),
+                        intval($paymentDetails['vads_expiry_year'])
+                    );
+
+                    $this->em->persist($payment);
+                    $this->em->persist($order);
+                    $this->em->persist($subscription);
+                    $this->em->flush();
+
+                    $this->payum->getHttpRequestVerifier()->invalidate($token);
+
+                    return new Response('OK');
                 }
-
-                $this->em->persist($payment);
-                $this->em->persist($order);
-                $this->em->persist($subscription);
-                $this->em->flush();
             }
         }
 
-        return new Response('OK');
+        return new Response('Invalid form answer from payzen');
+    }
+
+    protected function makeUniformPaymentDetails($formAnswer)
+    {
+        if (empty($formAnswer) || !is_array($formAnswer)) {
+            return [];
+        }
+
+        $details = $formAnswer;
+        if (array_key_exists('transactions', $formAnswer)) {
+            $transaction = current($formAnswer['transactions']);
+            $details['vads_trans_uuid'] = $transaction['uuid'];
+
+            if (array_key_exists('transactionDetails', $transaction)) {
+                $transactionDetails = $transaction['transactionDetails'];
+                $details['vads_trans_id'] = $transactionDetails['cardDetails']['legacyTransId'];
+                $details['vads_expiry_month'] = $transactionDetails['cardDetails']['expiryMonth'];
+                $details['vads_expiry_year'] = $transactionDetails['cardDetails']['expiryYear'];
+            }
+        }
+
+        return $details;
     }
 }

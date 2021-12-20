@@ -41,7 +41,6 @@ class PayzenSdkClient
 
     public function checkSignature()
     {
-        return true;
         return $this->client->checkHash($this->password);
     }
 
@@ -122,7 +121,7 @@ class PayzenSdkClient
         return [
             'amount' => $order->getTotal(),
             'currency' => $order->getCurrencyCode(),
-            'orderId' => 'order_' . $order->getId() . '_' . uniqid(),
+            'orderId' => $order->getNumber(),
             'customer' => [
                 'reference' => $customer->getId(),
                 'email' => $customer->getEmail(),
