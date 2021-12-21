@@ -129,25 +129,28 @@ final class IpnController
             $formAnswer = $rawAnswer['kr-answer'];
             $orderStatus = $formAnswer['orderStatus'];
 
-            $subscription = $order->getSubscription();
-            if ($orderStatus === 'PAID' && !empty($subscription)) {
+            if ($orderStatus === 'PAID') {
                 $payment = $order->getLastPayment(PaymentInterface::STATE_NEW);
                 $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
                 $payment->setDetails($paymentDetails);
-                $this->em->persist($payment);
 
-                $this->subscriptionService->updateCardExpiration(
-                    $subscription,
-                    intval($paymentDetails['vads_expiry_month']),
-                    intval($paymentDetails['vads_expiry_year'])
-                );
+                $subscription = $order->getSubscription();
+                if (!empty($subscription)) {
+                    $this->subscriptionService->updateCardExpiration(
+                        $subscription,
+                        intval($paymentDetails['vads_expiry_month']),
+                        intval($paymentDetails['vads_expiry_year'])
+                    );
 
-                $this->em->persist($subscription);
-                $this->em->flush();
+                    $this->em->persist($payment);
+                    $this->em->persist($order);
+                    $this->em->persist($subscription);
+                    $this->em->flush();
 
-                $this->payum->getHttpRequestVerifier()->invalidate($token);
+                    $this->payum->getHttpRequestVerifier()->invalidate($token);
 
-                return new Response('OK');
+                    return new Response('OK');
+                }
             }
         }
 
