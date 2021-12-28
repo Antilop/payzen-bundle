@@ -422,8 +422,8 @@ class PayzenClient
         $commonRequest->submissionDate = new DateTime('now');
 
         $paymentRequest = new paymentRequest();
-        $amount = $amount * 100;
-        $paymentRequest->amount = intval("$amount");
+
+        $paymentRequest->amount = $this->formatAmount($amount);
         $paymentRequest->currency = 978;
 
         $orderRequest = new orderRequest();
@@ -449,5 +449,13 @@ class PayzenClient
         $payment_result = $this->createPayment($createPayment);
 
         return $payment_result;
+    }
+
+    private function formatAmount($amount)
+    {
+        $formatter = new \NumberFormatter('fr', \NumberFormatter::DECIMAL);
+        $result = $formatter->format(abs($amount / 100));
+
+        return $amount >= 0 ? $result : '-' . $result;
     }
 }
