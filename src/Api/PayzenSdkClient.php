@@ -5,6 +5,7 @@ namespace Antilop\SyliusPayzenBundle\Api;
 use Lyra\Client as LyraClient;
 use Payum\Core\Payum;
 use Sylius\Component\Core\Model\OrderInterface;
+use Sylius\Component\Core\Model\OrderItemInterface;
 
 class PayzenSdkClient
 {
@@ -105,7 +106,7 @@ class PayzenSdkClient
         $billingAddress = $order->getBillingAddress();
         $lastPayment = $order->getLastPayment();
         $paymentModel = $this->payum->getStorage('App\Entity\Payment\Payment')->find($lastPayment->getId());
-        
+
         $ipnUrl = 'payzen_ipn_order_url';
         if ($action == 'CreateToken') {
             $ipnUrl = 'payzen_ipn_subscription_url';
@@ -117,6 +118,18 @@ class PayzenSdkClient
             $ipnUrl,
             ['orderId' => $order->getId()]
         );
+
+        $cartItems = [];
+        /** @var OrderItemInterface  $item */
+        foreach ($order->getItems() as $item) {
+            $cartItems[] = [
+                'productLabel' => $item->getProductName(),
+                'productRef' => $item->getVariant()->getCode(),
+                'productQty' => $item->getQuantity(),
+                'productAmount' => $item->getTotal(),
+                'productVat' => $item->getTaxTotal()
+            ];
+        }
 
         return [
             'amount' => $order->getTotal(),
@@ -145,7 +158,13 @@ class PayzenSdkClient
                     'country' => $billingAddress->getCountryCode(),
                     'phoneNumber' => $billingAddress->getPhoneNumber(),
                 ],
+                'shoppingCart' => [
+                    'shippingAmount' => $order->getShippingTotal(),
+                    'taxAmount' => $order->getTaxTotal(),
+                    'cartItemInfo' => $cartItems
+                ]
             ],
+            'strongAuthentication' => 'DISABLED',
             'ipnTargetUrl' => $captureToken->getTargetUrl()
         ];
     }
@@ -159,8 +178,8 @@ class PayzenSdkClient
     {
         LyraClient::setDefaultUsername($this->username);
         LyraClient::setDefaultPassword($this->password);
-        LyraClient::setDefaultEndpoint($this->endpoint); 
-        
-        $this->client = new LyraClient();  
+        LyraClient::setDefaultEndpoint($this->endpoint);
+
+        $this->client = new LyraClient();
     }
 }
