@@ -4,6 +4,7 @@ namespace Antilop\SyliusPayzenBundle\Controller;
 
 use Antilop\SyliusPayzenBundle\Factory\PayzenSdkClientFactory;
 use App\Service\SubscriptionService;
+use App\StateMachine\OrderCheckoutStates;
 use Doctrine\ORM\EntityManager;
 use Payum\Core\Payum;
 use SM\Factory\FactoryInterface;
@@ -108,7 +109,10 @@ final class IpnController
     public function updateSubscriptionBankDetailsAction(Request $request, $orderId): Response
     {
         /** @var SubscriptionDraftOrder|null $order */
-        $order = $this->orderRepository->findCartById($orderId);
+        $order = $this->orderRepository->findOneBy([
+            'id' => $orderId,
+            'checkoutState' => OrderCheckoutStates::STATE_DRAFT
+        ]);
 
         if (null === $order) {
             throw new NotFoundHttpException(sprintf('Order with id "%s" does not exist.', $orderId));
@@ -131,7 +135,8 @@ final class IpnController
 
             $subscription = $order->getSubscription();
             if ($orderStatus === 'PAID' && !empty($subscription)) {
-                $payment = $order->getLastPayment(PaymentInterface::STATE_NEW);
+                $payment = $order->getLastPayment(PaymentInterface::STATE_CART);
+
                 $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
                 $payment->setDetails($paymentDetails);
                 $this->em->persist($payment);

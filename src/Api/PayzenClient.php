@@ -168,11 +168,14 @@ class PayzenClient
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 
-    public function generateToken(Subscription $subscription)
+    public function generateToken(Subscription $subscription, $order = null)
     {
         $result = [];
 
-        $order = $subscription->getOrderOrigin();
+        if (is_null($order)) {
+            $order = $subscription->getOrderOrigin();
+        }
+
         $customer = $order->getCustomer();
         $payment = $order->getLastPayment();
         $paymentDetail = $payment->getDetails();
