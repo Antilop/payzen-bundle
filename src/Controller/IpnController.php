@@ -77,31 +77,33 @@ final class IpnController
             $formAnswer = $rawAnswer['kr-answer'];
             $orderStatus = $formAnswer['orderStatus'];
 
-            if ($orderStatus === 'PAID') {
-                $payment = $order->getLastPayment(PaymentInterface::STATE_CART);
-                if (!empty($payment)) {
-                    $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
-                    $stateMachine->apply(PaymentTransitions::TRANSITION_CREATE);
+            $payment = $order->getLastPayment(PaymentInterface::STATE_CART);
+            if ($orderStatus === 'PAID' && !empty($payment)) {
+                $this->markComplete($payment);
 
-                    $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
-                    $stateMachine->apply(PaymentTransitions::TRANSITION_COMPLETE);
-    
-                    $stateMachine = $this->factory->get($order, OrderCheckoutTransitions::GRAPH);
-                    $stateMachine->apply(OrderCheckoutTransitions::TRANSITION_COMPLETE);
+                $stateMachine = $this->factory->get($order, OrderCheckoutTransitions::GRAPH);
+                $stateMachine->apply(OrderCheckoutTransitions::TRANSITION_COMPLETE);
 
-                    $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
-                    $payment->setDetails($paymentDetails);
+                $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
+                $payment->setDetails($paymentDetails);
 
-                    $this->em->persist($payment);
-                    $this->em->persist($order);
-                    $this->em->flush();
+                $this->em->persist($payment);
+                $this->em->persist($order);
+                $this->em->flush();
 
-                    $this->payum->getHttpRequestVerifier()->invalidate($token);
+                return new Response('SUCCESS');
+            }
 
-                    return new Response('OK');
-                }
+            if ($orderStatus === 'UNPAID' && !empty($payment)) {
+                $this->markFailed($payment);
+                $this->em->persist($payment);
+                $this->em->flush();
+
+                return new Response('FAIL');
             }
         }
+
+        $this->payum->getHttpRequestVerifier()->invalidate($token);
 
         return new Response('Invalid form answer from payzen');
     }
@@ -134,29 +136,71 @@ final class IpnController
             $orderStatus = $formAnswer['orderStatus'];
 
             $subscription = $order->getSubscription();
-            if ($orderStatus === 'PAID' && !empty($subscription)) {
-                $payment = $order->getLastPayment(PaymentInterface::STATE_CART);
+            $payment = $order->getLastPayment(PaymentInterface::STATE_CART);
+            if ($orderStatus === 'PAID' && !empty($payment)) {
+                $this->markComplete($payment);
 
                 $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
                 $payment->setDetails($paymentDetails);
                 $this->em->persist($payment);
 
-                $this->subscriptionService->updateCardExpiration(
-                    $subscription,
-                    intval($paymentDetails['vads_expiry_month']),
-                    intval($paymentDetails['vads_expiry_year'])
-                );
+                if (!empty($subscription)) {
+                    $this->subscriptionService->updateCardExpiration(
+                        $subscription,
+                        intval($paymentDetails['vads_expiry_month']),
+                        intval($paymentDetails['vads_expiry_year'])
+                    );
 
-                $this->em->persist($subscription);
+                    $this->em->persist($subscription);
+                }
+
                 $this->em->flush();
 
-                $this->payum->getHttpRequestVerifier()->invalidate($token);
+                return new Response('SUCCESS');
+            }
 
-                return new Response('OK');
+            if ($orderStatus === 'UNPAID' && !empty($payment)) {
+                $this->markFailed($payment);
+                $this->em->persist($payment);
+                $this->em->flush();
+
+                return new Response('FAIL');
             }
         }
 
+        $this->payum->getHttpRequestVerifier()->invalidate($token);
+
         return new Response('Invalid form answer from payzen');
+    }
+
+    protected function markComplete($payment)
+    {
+        if (empty($payment)) {
+            return false;
+        }
+
+        $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
+        $stateMachine->apply(PaymentTransitions::TRANSITION_CREATE);
+
+        $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
+        $stateMachine->apply(PaymentTransitions::TRANSITION_COMPLETE);
+
+        return true;
+    }
+
+    protected function markFailed($payment)
+    {
+        if (empty($payment)) {
+            return false;
+        }
+
+        $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
+        $stateMachine->apply(PaymentTransitions::TRANSITION_CREATE);
+
+        $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
+        $stateMachine->apply(PaymentTransitions::TRANSITION_FAIL);
+
+        return true;
     }
 
     protected function makeUniformPaymentDetails($formAnswer)
