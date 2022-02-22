@@ -71,11 +71,10 @@ final class OrderPaymentProcessor implements OrderProcessorInterface
                 if (isset($result['success']) && boolval($result['success'])) {
                     $this->applyTransition($lastPayment, PaymentTransitions::TRANSITION_PROCESS);
                     $this->applyTransition($lastPayment, PaymentTransitions::TRANSITION_COMPLETE);
-                    $order->setPaymentState(OrderPaymentStates::STATE_PAID);
-                    $order->setState(OrderInterface::STATE_FULFILLED);
                 } else {
                     $stateMachine = $this->stateMachineFactory->get($order, SubscriptionDraftOrderTransitions::GRAPH);
                     $stateMachine->apply(SubscriptionDraftOrderTransitions::TRANSITION_PAYMENT_FAIL);
+                    $this->applyTransition($lastPayment, PaymentTransitions::TRANSITION_FAIL);
                 }
             }
 
