@@ -77,7 +77,7 @@ final class IpnController
             $formAnswer = $rawAnswer['kr-answer'];
             $orderStatus = $formAnswer['orderStatus'];
 
-            $payment = $order->getLastPayment(PaymentInterface::STATE_CART);
+            $payment = $order->getLastPayment(PaymentInterface::STATE_NEW);
             if ($orderStatus === 'PAID' && !empty($payment)) {
                 $this->markComplete($payment);
 
@@ -136,7 +136,7 @@ final class IpnController
             $orderStatus = $formAnswer['orderStatus'];
 
             $subscription = $order->getSubscription();
-            $payment = $order->getLastPayment(PaymentInterface::STATE_CART);
+            $payment = $order->getLastPayment(PaymentInterface::STATE_NEW);
             if ($orderStatus === 'PAID' && !empty($payment)) {
                 $this->markComplete($payment);
 
@@ -180,7 +180,7 @@ final class IpnController
         }
 
         $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
-        $stateMachine->apply(PaymentTransitions::TRANSITION_CREATE);
+        $stateMachine->apply(PaymentTransitions::TRANSITION_PROCESS);
 
         $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
         $stateMachine->apply(PaymentTransitions::TRANSITION_COMPLETE);
@@ -195,7 +195,7 @@ final class IpnController
         }
 
         $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
-        $stateMachine->apply(PaymentTransitions::TRANSITION_CREATE);
+        $stateMachine->apply(PaymentTransitions::TRANSITION_PROCESS);
 
         $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
         $stateMachine->apply(PaymentTransitions::TRANSITION_FAIL);

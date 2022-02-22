@@ -6,6 +6,7 @@ use Lyra\Client as LyraClient;
 use Payum\Core\Payum;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\OrderItemInterface;
+use Sylius\Component\Payment\PaymentTransitions;
 
 class PayzenSdkClient
 {
@@ -24,6 +25,9 @@ class PayzenSdkClient
     /** @var Payum */
     protected $payum;
 
+    /** @var FactoryInterface */
+    protected $factory;
+
     /**
      * Constructor
      *
@@ -31,13 +35,15 @@ class PayzenSdkClient
      * @param string $password
      * @param string $endpoint
      * @param Payum $payum
+     * @param FactoryInterface $factory
      */
-    public function __construct($username, $password, $endpoint, $payum)
+    public function __construct($username, $password, $endpoint, $payum, $factory)
     {
         $this->username = $username;
         $this->password = $password;
         $this->endpoint = $endpoint;
         $this->payum = $payum;
+        $this->factory = $factory;
     }
 
     public function checkSignature()
@@ -106,6 +112,11 @@ class PayzenSdkClient
         $billingAddress = $order->getBillingAddress();
         $lastPayment = $order->getLastPayment();
         $paymentModel = $this->payum->getStorage('App\Entity\Payment\Payment')->find($lastPayment->getId());
+
+        $stateMachine = $this->factory->get($lastPayment, PaymentTransitions::GRAPH);
+        if ($stateMachine->can(PaymentTransitions::TRANSITION_CREATE)) {
+            $stateMachine->apply(PaymentTransitions::TRANSITION_CREATE);
+        }
 
         $ipnUrl = 'payzen_ipn_order_url';
         if ($action == 'CreateToken') {
