@@ -18,7 +18,7 @@ services:
     antilop.payment.payzen.processor:
         class: Antilop\SyliusPayzenBundle\Processor\OrderPaymentProcessor
         decorates: sylius.order_processing.order_payment_processor.checkout
-        arguments: ['@.inner', '@sm.factory', '@antilop.payment.payzen.factory']
+        arguments: ['@.inner', '@sm.factory', '@antilop.payment.payzen.factory', '@sylius.order_payment_provider']
 
     Antilop\SyliusPayzenBundle\EventListener\UpdateBankDetailListener:
         arguments: ['@sm.factory']
@@ -39,3 +39,4 @@ services:
             - '@sm.factory'
             - '@app.service.subscription'
             - '@doctrine.orm.default_entity_manager'
+            - '@sylius.order_payment_provider'
