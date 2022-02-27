@@ -49,48 +49,12 @@ class Api
      */
     public function getTransactionId()
     {
-        $path = $this->getDirectoryPath() . 'transaction_id';
-
-        // Create file if not exists
-        if (!file_exists($path)) {
-            touch($path);
-            chmod($path, 0600);
+        $transactionId = $this->getTransactionIdByTimestamp();
+        if (!$transactionId) {
+            $transactionId = $this->getTransactionIdByModeFile();
         }
 
-        $date = (new \DateTime())->format('Ymd');
-        $fileDate = date('Ymd', filemtime($path));
-        $isDailyFirstAccess = ($date != $fileDate);
-
-        // Open file
-        $handle = fopen($path, 'r+');
-        if (false === $handle) {
-            throw new RuntimeException('Failed to open the transaction ID file.');
-        }
-        // Lock File
-        if (!flock($handle, LOCK_EX)) {
-            throw new RuntimeException('Failed to lock the transaction ID file.');
-        }
-
-        $id = 1;
-        // If not daily first access, read and increment the id
-        if (!$isDailyFirstAccess) {
-            $id = (int)fread($handle, 6);
-            $id++;
-        }
-
-        // Truncate, write, unlock and close.
-        fseek($handle, 0);
-        ftruncate($handle, 0);
-        fwrite($handle, (string)$id);
-        fflush($handle);
-        flock($handle, LOCK_UN);
-        fclose($handle);
-
-        if ($this->config['debug']) {
-            $id += 89000;
-        }
-
-        return str_pad($id, 6, '0', STR_PAD_LEFT);
+        return $transactionId;
     }
 
     /**
@@ -481,5 +445,69 @@ class Api
             'PAYSAFECARD', // Paysafe card
             'VISA', // Visa
         ];
+    }
+
+    private function getTransactionIdByTimestamp()
+    {
+        $timestamp = time();
+        $parts = explode(' ', microtime());
+        $id = ($timestamp + $parts[0] - strtotime('today 00:00')) * 10;
+        $id = sprintf('%06d', $id);
+
+        if (!empty($_SERVER['APP_ENV'])) {
+            if ($_SERVER['APP_ENV'] === 'dev') {
+                $id = substr_replace($id, 'LO', 0, 2);
+            } elseif ($_SERVER['APP_ENV'] === 'staging') {
+                $id = substr_replace($id, 'ST', 0, 2);
+            }
+        }
+
+        return $id;
+    }
+
+    private function getTransactionIdByModeFile()
+    {
+        $path = $this->getDirectoryPath() . 'transaction_id';
+
+        // Create file if not exists
+        if (!file_exists($path)) {
+            touch($path);
+            chmod($path, 0600);
+        }
+
+        $date = (new \DateTime())->format('Ymd');
+        $fileDate = date('Ymd', filemtime($path));
+        $isDailyFirstAccess = ($date != $fileDate);
+
+        // Open file
+        $handle = fopen($path, 'r+');
+        if (false === $handle) {
+            throw new RuntimeException('Failed to open the transaction ID file.');
+        }
+        // Lock File
+        if (!flock($handle, LOCK_EX)) {
+            throw new RuntimeException('Failed to lock the transaction ID file.');
+        }
+
+        $id = 1;
+        // If not daily first access, read and increment the id
+        if (!$isDailyFirstAccess) {
+            $id = (int)fread($handle, 6);
+            $id++;
+        }
+
+        // Truncate, write, unlock and close.
+        fseek($handle, 0);
+        ftruncate($handle, 0);
+        fwrite($handle, (string)$id);
+        fflush($handle);
+        flock($handle, LOCK_UN);
+        fclose($handle);
+
+        if ($this->config['debug']) {
+            $id += 89000;
+        }
+
+        return str_pad($id, 6, '0', STR_PAD_LEFT);
     }
 }
