@@ -11,6 +11,7 @@ use SM\Factory\FactoryInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderCheckoutTransitions;
+use Sylius\Component\Core\Payment\Provider\OrderPaymentProviderInterface;
 use Sylius\Component\Order\Repository\OrderRepositoryInterface;
 use Sylius\Component\Payment\PaymentTransitions;
 use Symfony\Component\HttpFoundation\Request;
@@ -37,13 +38,17 @@ final class IpnController
     /** @var EntityManager */
     protected $em;
 
+    /** @var OrderPaymentProviderInterface */
+    private $orderPaymentProvider;
+
     public function __construct(
         Payum $payum,
         OrderRepositoryInterface $orderRepository,
         PayzenSdkClientFactory $payzenSdkClientFactory,
         FactoryInterface $factory,
         SubscriptionService $subscriptionService,
-        EntityManager $em
+        EntityManager $em,
+        OrderPaymentProviderInterface $orderPaymentProvider
     ) {
         $this->payum = $payum;
         $this->orderRepository = $orderRepository;
@@ -51,6 +56,7 @@ final class IpnController
         $this->factory = $factory;
         $this->subscriptionService = $subscriptionService;
         $this->em = $em;
+        $this->orderPaymentProvider = $orderPaymentProvider;
     }
 
     public function completeOrderAction(Request $request, $orderId): Response
@@ -95,7 +101,7 @@ final class IpnController
             }
 
             if ($orderStatus === 'UNPAID' && !empty($payment)) {
-                $this->markFailed($payment);
+                $this->markFailed($payment, $order);
                 $this->em->persist($payment);
                 $this->em->flush();
 
@@ -160,7 +166,7 @@ final class IpnController
             }
 
             if ($orderStatus === 'UNPAID' && !empty($payment)) {
-                $this->markFailed($payment);
+                $this->markFailed($payment, $order);
                 $this->em->persist($payment);
                 $this->em->flush();
 
@@ -188,7 +194,7 @@ final class IpnController
         return true;
     }
 
-    protected function markFailed($payment)
+    protected function markFailed($payment, $order)
     {
         if (empty($payment)) {
             return false;
@@ -200,6 +206,9 @@ final class IpnController
         $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
         $stateMachine->apply(PaymentTransitions::TRANSITION_FAIL);
 
+        $newPayment = $this->orderPaymentProvider->provideOrderPayment($order, PaymentInterface::STATE_CART);
+        $order->addPayment($newPayment);
+    
         return true;
     }
 
