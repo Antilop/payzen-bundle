@@ -142,6 +142,12 @@ class PayzenSdkClient
             ];
         }
 
+        $shoppingCart = [
+            'cartItemInfo' => $cartItems
+        ];
+        if($order->getTaxTotal()) $shoppingCart['taxAmount'] = $order->getTaxTotal();
+        if($order->getShippingTotal()) $shoppingCart['shippingAmount'] = $order->getShippingTotal();
+
         return [
             'amount' => $order->getTotal(),
             'currency' => $order->getCurrencyCode(),
@@ -169,11 +175,7 @@ class PayzenSdkClient
                     'country' => $billingAddress->getCountryCode(),
                     'phoneNumber' => $billingAddress->getPhoneNumber(),
                 ],
-                'shoppingCart' => [
-                    'shippingAmount' => $order->getShippingTotal(),
-                    'taxAmount' => $order->getTaxTotal(),
-                    'cartItemInfo' => $cartItems
-                ]
+                'shoppingCart' => $shoppingCart
             ],
             'strongAuthentication' => 'DISABLED',
             'ipnTargetUrl' => $captureToken->getTargetUrl()
