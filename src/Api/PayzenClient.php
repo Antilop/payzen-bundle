@@ -45,7 +45,7 @@ class PayzenClient
         $responseCode = null;
         $message = '';
         $transactionId = '';
-        $data = [];
+        $transactionUuid = '';
         $timestamp = time();
 
         try {
@@ -87,18 +87,17 @@ class PayzenClient
                 }
 
                 $transactionId = $createPaymentResponse->createPaymentResult->paymentResponse->transactionId;
+                $transactionUuid = $createPaymentResponse->createPaymentResult->paymentResponse->transactionUuid;
 
                 $cardNumber = $createPaymentResponse->createPaymentResult->cardResponse->number;
                 $cardBrand = $createPaymentResponse->createPaymentResult->cardResponse->brand;
                 $expiryMonth = $createPaymentResponse->createPaymentResult->cardResponse->expiryMonth;
                 $expiryYear = $createPaymentResponse->createPaymentResult->cardResponse->expiryYear;
 
-                $data = array(
-                    'card_number' => $cardNumber,
-                    'card_brand' => $cardBrand,
-                    'expiry_month' => $expiryMonth,
-                    'expiry_year' => $expiryYear
-                );
+                $result['vads_card_number'] = $cardNumber;
+                $result['vads_expiry_month'] = $expiryMonth;
+                $result['vads_expiry_year'] = $expiryYear;
+                $result['vads_card_brand'] = $cardBrand;
 
                 if (!empty($createPaymentResponse->createPaymentResult->authorizationResponse)) {
                     $resultTimestamp = $createPaymentResponse->createPaymentResult->authorizationResponse->date;
@@ -117,8 +116,8 @@ class PayzenClient
         $result['success'] = $success;
         $result['response_code'] = $responseCode;
         $result['message'] = $message;
-        $result['transaction_id'] = $transactionId;
-        $result['data'] = $data;
+        $result['vads_trans_id'] = $transactionId;
+        $result['vads_trans_uuid'] = $transactionUuid;
         $result['timestamp'] = $timestamp;
 
         return $result;
