@@ -117,7 +117,7 @@ class PayzenClient
         $result['success'] = $success;
         $result['response_code'] = $responseCode;
         $result['message'] = $message;
-        $result['transaction_id'] = $transactionId;
+        $result['vads_trans_id'] = $transactionId;
         $result['data'] = $data;
         $result['timestamp'] = $timestamp;
 
