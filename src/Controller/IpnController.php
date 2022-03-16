@@ -208,6 +208,11 @@ final class IpnController
 
         $newPayment = $this->orderPaymentProvider->provideOrderPayment($order, PaymentInterface::STATE_CART);
         $order->addPayment($newPayment);
+        
+        $stateMachine = $this->factory->get($newPayment, PaymentTransitions::GRAPH);
+        if ($stateMachine->can(PaymentTransitions::TRANSITION_CREATE)) {
+            $stateMachine->apply(PaymentTransitions::TRANSITION_CREATE);
+        }
     
         return true;
     }
