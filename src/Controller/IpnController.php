@@ -3,6 +3,8 @@
 namespace Antilop\SyliusPayzenBundle\Controller;
 
 use Antilop\SyliusPayzenBundle\Factory\PayzenSdkClientFactory;
+use App\Entity\Subscription\Subscription;
+use App\Entity\Subscription\SubscriptionState;
 use App\Service\SubscriptionService;
 use App\StateMachine\OrderCheckoutStates;
 use Doctrine\ORM\EntityManager;
@@ -20,6 +22,9 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 final class IpnController
 {
+    const OPERATION_TYPE_VERIFICATION = 'VERIFICATION';
+    const OPERATION_TYPE_DEBIT = 'DEBIT';
+
     /** @var Payum */
     protected $payum;
 
@@ -138,17 +143,22 @@ final class IpnController
 
         $rawAnswer = $payzenClient->getFormAnswer();
         if (!empty($rawAnswer)) {
-            $formAnswer = $rawAnswer['kr-answer'];
-            $orderStatus = $formAnswer['orderStatus'];
-
+            /** @var Subscription $subscription */
             $subscription = $order->getSubscription();
             $payment = $order->getLastPayment(PaymentInterface::STATE_NEW);
-            if ($orderStatus === 'PAID' && !empty($payment)) {
-                $this->markComplete($payment);
 
-                $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
-                $payment->setDetails($paymentDetails);
-                $this->em->persist($payment);
+            $formAnswer = $rawAnswer['kr-answer'];
+            $orderStatus = $formAnswer['orderStatus'];
+            $operationType = $formAnswer['operationType'];
+
+            if ($orderStatus === 'PAID' && !empty($payment)) {
+                if ($operationType === static::OPERATION_TYPE_DEBIT) {
+                    $this->markComplete($payment);
+
+                    $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
+                    $payment->setDetails($paymentDetails);
+                    $this->em->persist($payment);
+                }
 
                 if (!empty($subscription)) {
                     $this->subscriptionService->updateCardExpiration(
@@ -208,12 +218,12 @@ final class IpnController
 
         $newPayment = $this->orderPaymentProvider->provideOrderPayment($order, PaymentInterface::STATE_CART);
         $order->addPayment($newPayment);
-        
+
         $stateMachine = $this->factory->get($newPayment, PaymentTransitions::GRAPH);
         if ($stateMachine->can(PaymentTransitions::TRANSITION_CREATE)) {
             $stateMachine->apply(PaymentTransitions::TRANSITION_CREATE);
         }
-    
+
         return true;
     }
 
