@@ -149,7 +149,6 @@ final class IpnController
 
             $formAnswer = $rawAnswer['kr-answer'];
             $orderStatus = $formAnswer['orderStatus'];
-            $operationType = $formAnswer['operationType'];
 
             if ($orderStatus === 'PAID' && !empty($payment)) {
                 $expiryMonth = 0;
