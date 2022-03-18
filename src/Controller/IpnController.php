@@ -3,6 +3,8 @@
 namespace Antilop\SyliusPayzenBundle\Controller;
 
 use Antilop\SyliusPayzenBundle\Factory\PayzenSdkClientFactory;
+use App\Entity\Subscription\Subscription;
+use App\Entity\Subscription\SubscriptionState;
 use App\Service\SubscriptionService;
 use App\StateMachine\OrderCheckoutStates;
 use Doctrine\ORM\EntityManager;
@@ -141,14 +143,17 @@ final class IpnController
             $formAnswer = $rawAnswer['kr-answer'];
             $orderStatus = $formAnswer['orderStatus'];
 
+            /** @var Subscription $subscription */
             $subscription = $order->getSubscription();
             $payment = $order->getLastPayment(PaymentInterface::STATE_NEW);
             if ($orderStatus === 'PAID' && !empty($payment)) {
-                $this->markComplete($payment);
+                if ($subscription->getState() === SubscriptionState::STATE_PAYMENT_FAILED) {
+                    $this->markComplete($payment);
 
-                $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
-                $payment->setDetails($paymentDetails);
-                $this->em->persist($payment);
+                    $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
+                    $payment->setDetails($paymentDetails);
+                    $this->em->persist($payment);
+                }
 
                 if (!empty($subscription)) {
                     $this->subscriptionService->updateCardExpiration(
@@ -208,12 +213,12 @@ final class IpnController
 
         $newPayment = $this->orderPaymentProvider->provideOrderPayment($order, PaymentInterface::STATE_CART);
         $order->addPayment($newPayment);
-        
+
         $stateMachine = $this->factory->get($newPayment, PaymentTransitions::GRAPH);
         if ($stateMachine->can(PaymentTransitions::TRANSITION_CREATE)) {
             $stateMachine->apply(PaymentTransitions::TRANSITION_CREATE);
         }
-    
+
         return true;
     }
 
