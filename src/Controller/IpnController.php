@@ -22,6 +22,9 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 final class IpnController
 {
+    const OPERATION_TYPE_VERIFICATION = 'VERIFICATION';
+    const OPERATION_TYPE_DEBIT = 'DEBIT';
+
     /** @var Payum */
     protected $payum;
 
@@ -140,14 +143,16 @@ final class IpnController
 
         $rawAnswer = $payzenClient->getFormAnswer();
         if (!empty($rawAnswer)) {
-            $formAnswer = $rawAnswer['kr-answer'];
-            $orderStatus = $formAnswer['orderStatus'];
-
             /** @var Subscription $subscription */
             $subscription = $order->getSubscription();
             $payment = $order->getLastPayment(PaymentInterface::STATE_NEW);
+
+            $formAnswer = $rawAnswer['kr-answer'];
+            $orderStatus = $formAnswer['orderStatus'];
+            $operationType = $formAnswer['operationType'];
+
             if ($orderStatus === 'PAID' && !empty($payment)) {
-                if ($subscription->getState() === SubscriptionState::STATE_PAYMENT_FAILED) {
+                if ($operationType === static::OPERATION_TYPE_DEBIT) {
                     $this->markComplete($payment);
 
                     $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
