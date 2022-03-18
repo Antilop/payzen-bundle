@@ -152,6 +152,23 @@ final class IpnController
             $operationType = $formAnswer['operationType'];
 
             if ($orderStatus === 'PAID' && !empty($payment)) {
+                $expiryMonth = 0;
+                $expiryYear = 0;
+                $operationType = '';
+                $cardToken = '';
+
+                if (array_key_exists('transactions', $formAnswer)) {
+                    $transaction = current($formAnswer['transactions']);
+                    $operationType = $transaction['operationType'];
+                    $cardToken = $transaction['paymentMethodToken'];
+
+                    if (array_key_exists('transactionDetails', $transaction)) {
+                        $transactionDetails = $transaction['transactionDetails'];
+                        $expiryMonth = $transactionDetails['cardDetails']['expiryMonth'];
+                        $expiryYear = $transactionDetails['cardDetails']['expiryYear'];
+                    }
+                }
+
                 if ($operationType === static::OPERATION_TYPE_DEBIT) {
                     $this->markComplete($payment);
 
@@ -160,11 +177,12 @@ final class IpnController
                     $this->em->persist($payment);
                 }
 
-                if (!empty($subscription)) {
-                    $this->subscriptionService->updateCardExpiration(
+                if (!empty($subscription) && !empty($expiryMonth) && !empty($expiryYear) && !empty($cardToken)) {
+                    $this->subscriptionService->updateCard(
                         $subscription,
-                        intval($paymentDetails['vads_expiry_month']),
-                        intval($paymentDetails['vads_expiry_year'])
+                        intval($expiryMonth),
+                        intval($expiryYear),
+                        $cardToken
                     );
 
                     $this->em->persist($subscription);
