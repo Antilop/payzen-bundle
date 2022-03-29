@@ -145,7 +145,7 @@ final class IpnController
         if (!empty($rawAnswer)) {
             /** @var Subscription $subscription */
             $subscription = $order->getSubscription();
-            $payment = $order->getLastPayment(PaymentInterface::STATE_NEW);
+            $payment = $order->getLastPayment(PaymentInterface::STATE_CART);
 
             $formAnswer = $rawAnswer['kr-answer'];
             $orderStatus = $formAnswer['orderStatus'];
@@ -169,12 +169,20 @@ final class IpnController
                 }
 
                 if ($operationType === static::OPERATION_TYPE_DEBIT) {
+                    $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
+                    if ($stateMachine->can(PaymentTransitions::TRANSITION_CREATE)) {
+                        $stateMachine->apply(PaymentTransitions::TRANSITION_CREATE);
+                    }
+
                     $this->markComplete($payment);
 
                     $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
                     $payment->setDetails($paymentDetails);
                     $this->em->persist($payment);
+                } else {
+                    $payment->setState(PaymentInterface::STATE_CART);
                 }
+                $this->em->persist($payment);
 
                 if (!empty($subscription) && !empty($expiryMonth) && !empty($expiryYear) && !empty($cardToken)) {
                     $this->subscriptionService->updateCard(
