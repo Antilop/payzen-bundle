@@ -47,14 +47,15 @@ final class IpnController
     private $orderPaymentProvider;
 
     public function __construct(
-        Payum $payum,
-        OrderRepositoryInterface $orderRepository,
-        PayzenSdkClientFactory $payzenSdkClientFactory,
-        FactoryInterface $factory,
-        SubscriptionService $subscriptionService,
-        EntityManager $em,
+        Payum                         $payum,
+        OrderRepositoryInterface      $orderRepository,
+        PayzenSdkClientFactory        $payzenSdkClientFactory,
+        FactoryInterface              $factory,
+        SubscriptionService           $subscriptionService,
+        EntityManager                 $em,
         OrderPaymentProviderInterface $orderPaymentProvider
-    ) {
+    )
+    {
         $this->payum = $payum;
         $this->orderRepository = $orderRepository;
         $this->payzenSdkClientFactory = $payzenSdkClientFactory;
@@ -145,7 +146,6 @@ final class IpnController
         if (!empty($rawAnswer)) {
             /** @var Subscription $subscription */
             $subscription = $order->getSubscription();
-            $payment = $order->getLastPayment(PaymentInterface::STATE_NEW);
 
             $formAnswer = $rawAnswer['kr-answer'];
             $orderStatus = $formAnswer['orderStatus'];
@@ -153,12 +153,10 @@ final class IpnController
             if ($orderStatus === 'PAID' && !empty($payment)) {
                 $expiryMonth = 0;
                 $expiryYear = 0;
-                $operationType = '';
                 $cardToken = '';
 
                 if (array_key_exists('transactions', $formAnswer)) {
                     $transaction = current($formAnswer['transactions']);
-                    $operationType = $transaction['operationType'];
                     $cardToken = $transaction['paymentMethodToken'];
 
                     if (array_key_exists('transactionDetails', $transaction)) {
@@ -166,14 +164,6 @@ final class IpnController
                         $expiryMonth = $transactionDetails['cardDetails']['expiryMonth'];
                         $expiryYear = $transactionDetails['cardDetails']['expiryYear'];
                     }
-                }
-
-                if ($operationType === static::OPERATION_TYPE_DEBIT) {
-                    $this->markComplete($payment);
-
-                    $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
-                    $payment->setDetails($paymentDetails);
-                    $this->em->persist($payment);
                 }
 
                 if (!empty($subscription) && !empty($expiryMonth) && !empty($expiryYear) && !empty($cardToken)) {
@@ -192,11 +182,7 @@ final class IpnController
                 return new Response('SUCCESS');
             }
 
-            if ($orderStatus === 'UNPAID' && !empty($payment)) {
-                $this->markFailed($payment, $order);
-                $this->em->persist($payment);
-                $this->em->flush();
-
+            if ($orderStatus === 'UNPAID') {
                 return new Response('FAIL');
             }
         }
