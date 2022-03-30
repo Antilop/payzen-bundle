@@ -150,7 +150,7 @@ final class IpnController
             $formAnswer = $rawAnswer['kr-answer'];
             $orderStatus = $formAnswer['orderStatus'];
 
-            if ($orderStatus === 'PAID' && !empty($payment)) {
+            if ($orderStatus === 'PAID') {
                 $expiryMonth = 0;
                 $expiryYear = 0;
                 $cardToken = '';
