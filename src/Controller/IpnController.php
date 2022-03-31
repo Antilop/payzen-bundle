@@ -62,7 +62,7 @@ final class IpnController
         SubscriptionService           $subscriptionService,
         EntityManager                 $em,
         OrderPaymentProviderInterface $orderPaymentProvider,
-        StateResolverInterface $orderPaymentStateResolver,
+        StateResolverInterface        $orderPaymentStateResolver,
         Logger                        $logger
     )
     {
@@ -107,7 +107,7 @@ final class IpnController
                 /** @var OrderInterface $order */
                 $order = $payment->getOrder();
 
-                $payzenTotal = (int) $formAnswer['orderDetails']['orderTotalAmount'];
+                $payzenTotal = (int)$formAnswer['orderDetails']['orderTotalAmount'];
                 if ($payzenTotal != $order->getTotal()) {
                     $payment->setAmount($payzenTotal);
                     $this->orderPaymentStateResolver->resolve($order);
