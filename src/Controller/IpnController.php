@@ -15,6 +15,7 @@ use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderCheckoutTransitions;
 use Sylius\Component\Core\Payment\Provider\OrderPaymentProviderInterface;
 use Sylius\Component\Order\Repository\OrderRepositoryInterface;
+use Sylius\Component\Order\StateResolver\StateResolverInterface;
 use Sylius\Component\Payment\PaymentTransitions;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -46,6 +47,9 @@ final class IpnController
     /** @var OrderPaymentProviderInterface */
     private $orderPaymentProvider;
 
+    /** @var StateResolverInterface */
+    private $orderPaymentStateResolver;
+
     public function __construct(
         Payum                         $payum,
         OrderRepositoryInterface      $orderRepository,
@@ -53,7 +57,8 @@ final class IpnController
         FactoryInterface              $factory,
         SubscriptionService           $subscriptionService,
         EntityManager                 $em,
-        OrderPaymentProviderInterface $orderPaymentProvider
+        OrderPaymentProviderInterface $orderPaymentProvider,
+        StateResolverInterface        $orderPaymentStateResolver
     )
     {
         $this->payum = $payum;
@@ -63,6 +68,7 @@ final class IpnController
         $this->subscriptionService = $subscriptionService;
         $this->em = $em;
         $this->orderPaymentProvider = $orderPaymentProvider;
+        $this->orderPaymentStateResolver = $orderPaymentStateResolver;
     }
 
     public function completeOrderAction(Request $request, $orderId): Response
@@ -89,8 +95,16 @@ final class IpnController
             $formAnswer = $rawAnswer['kr-answer'];
             $orderStatus = $formAnswer['orderStatus'];
 
+            /** @var PaymentInterface $payment */
             $payment = $order->getLastPayment(PaymentInterface::STATE_NEW);
             if ($orderStatus === 'PAID' && !empty($payment)) {
+
+                $payzenTotal = (int)$formAnswer['orderDetails']['orderTotalAmount'];
+                if ($payzenTotal != $order->getTotal()) {
+                    $payment->setAmount($payzenTotal);
+                    $this->orderPaymentStateResolver->resolve($order);
+                }
+
                 $this->markComplete($payment);
 
                 $stateMachine = $this->factory->get($order, OrderCheckoutTransitions::GRAPH);
