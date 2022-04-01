@@ -41,4 +41,3 @@ services:
             - '@doctrine.orm.default_entity_manager'
             - '@sylius.order_payment_provider'
             - '@sylius.state_resolver.order_payment'
-            - '@monolog.logger'
