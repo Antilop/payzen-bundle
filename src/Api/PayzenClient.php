@@ -2,343 +2,221 @@
 
 namespace Antilop\SyliusPayzenBundle\Api;
 
+use App\Entity\Order\Order;
 use App\Entity\Subscription\SubscriptionDraftOrder;
-use DOMDocument;
-use DOMXPath;
-use SoapFault;
-use SoapClient;
-use SoapHeader;
-use DateTime;
 use App\Entity\Subscription\Subscription;
+use Lyra\Client as LyraClient;
 
-/**
- * @link https://sogecommerce.societegenerale.eu/doc/fr-FR/webservices-payment/implementation-webservices-v5/tla1414490232969.pdf Documentation de l'API
- */
 class PayzenClient
 {
+    /** @var LyraClient */
     protected $client;
-    protected $certificate;
-    protected $siteId;
-    protected $webserviceEndpoint;
-    protected $requestId;
-    protected $authToken;
-    protected $ctxMode;
+
+    /** @var string */
+    protected $username;
+
+    /** @var string */
+    protected $password;
 
     /**
      * PayzenClient constructor.
      *
      * @param Payment $payment
      */
-    public function __construct($webserviceEndpoint, $siteId, $certificate, $ctxMode)
+    public function __construct($username, $password, $endpoint)
     {
-        $this->webserviceEndpoint = $webserviceEndpoint;
-        $this->siteId = $siteId;
-        $this->certificate = $certificate;
-        $this->ctxMode = $ctxMode;
+        $this->username = $username;
+        $this->password = $password;
+        $this->endpoint = $endpoint;
     }
 
-    public function createPayment(createPayment $createPayment)
+
+    public function generateAlias(Order $order)
     {
         $result = [];
-        $createPaymentResponse = null;
-        $success = 0;
-        $responseCode = null;
-        $message = '';
-        $transactionId = '';
-        $transactionUuid = '';
+
+        $payment = $order->getLastPayment();
+        $paymentDetail = $payment->getDetails();
+
+        $transactionUuid = $paymentDetail['vads_trans_uuid'];
+
+        $params = [
+            'uuid' => $transactionUuid,
+        ];
+
+        $response = $this->client->post('V4/Charge/CreateTokenFromTransaction', $params);
+
+        if ($response['status'] !== 'SUCCESS') {
+            return [
+                'error' => $response['answer']['errorMessage'],
+                'formToken' => false,
+                'message' => false,
+                'expiry_date' => false,
+                'success' => false,
+            ];
+        }
+
+        $answer = $response['answer'];
+        $tokenDetails = $answer['tokenDetails'];
+        $expiryMonth = $tokenDetails['expiryMonth'];
+        $expiryYear = $tokenDetails['expiryYear'];
+        $expiryDate = new \DateTime();
+        $expiryDate->setTime(0, 0, 0);
+        $expiryDate->setDate($expiryYear, $expiryMonth, 1);
+        $responseCode = intval($tokenDetails['authorizationResponse']['authorizationResult']);
+        $message = $this->getCodeDetail($responseCode);
+
+        return [
+            'response_code' => $responseCode,
+            'message' => $message,
+            'payment_token' => $answer['paymentMethodToken'],
+            'expiry_date' => $expiryDate,
+            'success' => true,
+        ];
+    }
+
+
+    public function processPayment(SubscriptionDraftOrder $subscriptionDraftOrder)
+    {
+        $transactionCode = 99;
+        $authorizationResultCode = 99;
         $timestamp = time();
+        $transactionUuid = '';
+        $success = false;
 
-        try {
-            $createPaymentResponse = $this->client->createPayment($createPayment);
-        } catch (SoapFault $fault) {
-            //Gestion des exceptions
-            trigger_error("SOAP Fault: (faultcode: {$fault->faultcode}, faultstring: {$fault->faultstring})", E_USER_ERROR);
+        $subscription = $subscriptionDraftOrder->getSubscription();
+
+        $payment = $subscriptionDraftOrder->getLastPayment();
+
+        if (empty($payment) || $payment->getMethod()->getCode() !== 'PAYZEN') {
+            return [
+                'success' => false,
+                'message' => sprintf('Moyen de paiement associé incorrect ou inexistant ABO : %s', $subscription->getId())
+            ];
         }
 
-        $dom = new DOMDocument();
-        $dom->loadXML($this->client->__getLastResponse(), LIBXML_NOWARNING);
-        $path = new DOMXPath($dom);
-        $headers = $path->query('//*[local-name()="Header"]/*');
-        $responseHeader = array();
-        foreach ($headers as $headerItem) {
-            $responseHeader[$headerItem->nodeName] = $headerItem->nodeValue;
+        $token = $subscription->getCardToken();
+
+        $params = [
+            'amount' => $subscriptionDraftOrder->getTotal(),
+            'currency' => $subscriptionDraftOrder->getCurrencyCode(),
+            'customer' => [
+                'email' => 'leo@antilop.fr'
+            ],
+            'paymentMethodToken' => $token,
+            'formAction' => 'SILENT'
+        ];
+
+        $response = $this->client->post('V4/Charge/CreatePayment', $params);
+        $answer = $response['answer'];
+
+        if ($response['status'] !== 'SUCCESS') {
+            return [
+                'error' => $answer['errorMessage'],
+                'formToken' => false,
+                'success' => false,
+            ];
         }
 
-        //Calcul du jeton d'authentification de la réponse
-        $authTokenResponse = base64_encode(hash_hmac('sha256', $responseHeader['timestamp'] . $responseHeader['requestId'], $this->certificate, true));
-        if ($authTokenResponse !== $responseHeader['authToken']) {
-            $message = 'Erreur interne rencontrée : erreur de calcul ou tentative de fraude';
-        } else {
-            $responseCode = $createPaymentResponse->createPaymentResult->commonResponse->responseCode;
-            $message = $this->getCodeDetail($responseCode) . ' (CODE:' . $responseCode . ')';
+        if (array_key_exists('transactions', $answer) && is_array($answer['transactions'])) {
+            $transaction = current($answer['transactions']);
 
-            //Analyse de la réponse
-            if ($createPaymentResponse->createPaymentResult->commonResponse->responseCode != "0") {
-                $success = 0;
-            } else {
-                if ($createPaymentResponse->createPaymentResult->commonResponse->transactionStatusLabel == 'AUTHORISED'
-                    || $createPaymentResponse->createPaymentResult->commonResponse->transactionStatusLabel == 'WAITING_AUTORISATION'
-                    || $createPaymentResponse->createPaymentResult->commonResponse->transactionStatusLabel == 'AUTHORISED_TO_VALIDATE'
-                    || $createPaymentResponse->createPaymentResult->commonResponse->transactionStatusLabel == 'WAITING_AUTORISATION_TO_VALIDATE'
-                ) {
-                    $success = 1;
-                } else {
-                    $success = 0;
-                }
+            if (!empty($transaction)) {
+                $transactionDetails = $transaction['transactionDetails'];
+                $paymentMethodDetails = $transactionDetails['paymentMethodDetails'];
+                $authorizationResponse = $paymentMethodDetails['authorizationResponse'];
+                $cardDetails = $transactionDetails['cardDetails'];
+                $transactionCode = intval($transaction['errorCode']);
+                $authorizationResultCode = $authorizationResponse['authorizationResult'];
+                $authorizationDate = $authorizationResponse['authorizationDate'];
 
-                $transactionId = $createPaymentResponse->createPaymentResult->paymentResponse->transactionId;
-                $transactionUuid = $createPaymentResponse->createPaymentResult->paymentResponse->transactionUuid;
+                if ($authorizationResultCode == '0') {
+                    $success = true;
+                    $timestamp = strtotime($authorizationDate . ' UTC');
+                    $cardNumber = $cardDetails['pan'];
+                    $cardBrand = $cardDetails['effectiveBrand'];
+                    $expiryMonth = $cardDetails['expiryMonth'];
+                    $expiryYear = $cardDetails['expiryYear'];
+                    $transactionUuid = $transaction['uuid'];
 
-                $cardNumber = $createPaymentResponse->createPaymentResult->cardResponse->number;
-                $cardBrand = $createPaymentResponse->createPaymentResult->cardResponse->brand;
-                $expiryMonth = $createPaymentResponse->createPaymentResult->cardResponse->expiryMonth;
-                $expiryYear = $createPaymentResponse->createPaymentResult->cardResponse->expiryYear;
-
-                $result['vads_card_number'] = $cardNumber;
-                $result['vads_expiry_month'] = $expiryMonth;
-                $result['vads_expiry_year'] = $expiryYear;
-                $result['vads_card_brand'] = $cardBrand;
-
-                if (!empty($createPaymentResponse->createPaymentResult->authorizationResponse)) {
-                    $resultTimestamp = $createPaymentResponse->createPaymentResult->authorizationResponse->date;
-                    $timestamp = strtotime($resultTimestamp . ' UTC');
-
-                    $message .= ' | ' . $this->codeDetailAuthorizationResponse($createPaymentResponse->createPaymentResult->authorizationResponse->result) . ' (CODE : ' . $createPaymentResponse->createPaymentResult->authorizationResponse->result . ')';
-                } else {
-                    $resultTimestamp = new DateTime('now');
-                    $timestamp = $resultTimestamp->format('Y-m-d H:i:s');
-
-                    $message .= ' |  (CODE : )';
+                    $result['vads_card_number'] = $cardNumber;
+                    $result['vads_expiry_month'] = $expiryMonth;
+                    $result['vads_expiry_year'] = $expiryYear;
+                    $result['vads_card_brand'] = $cardBrand;
                 }
             }
+
         }
 
+        $message = $this->getCodeDetail($transactionCode) . ' (CODE:' . $transactionCode . ')';
+        $message .= ' | ' . $this->codeDetailAuthorizationResponse($authorizationResultCode) . ' (CODE : ' . $authorizationResultCode . ')';
+
         $result['success'] = $success;
-        $result['response_code'] = $responseCode;
+        $result['response_code'] = $transactionCode;
         $result['message'] = $message;
-        $result['vads_trans_id'] = $transactionId;
+        $result['vads_trans_id'] = $transactionUuid;
         $result['vads_trans_uuid'] = $transactionUuid;
         $result['timestamp'] = $timestamp;
 
         return $result;
     }
 
+    /**
+     * Init keys for SDK
+     *
+     * @return void
+     */
     public function init()
     {
-        // Exemple d'Initialisation d'un client SOAP sans proxy
-        $this->client = new SoapClient(
-            $this->webserviceEndpoint,
-            $options = array(
-                'trace' => 1,
-                'exceptions' => 0,
-                'encoding' => 'UTF-8',
-                'soapaction' => ''
-            )
-        );
+        LyraClient::setDefaultUsername($this->username);
+        LyraClient::setDefaultPassword($this->password);
+        LyraClient::setDefaultEndpoint($this->endpoint);
 
-        $this->requestId = $this->genUuid();
-        $timestamp = gmdate("Y-m-d\TH:i:s\Z");
-        $this->authToken = base64_encode(hash_hmac('sha256', $this->requestId . $timestamp, $this->certificate, true));
-        $this->setHeaders($this->siteId, $this->requestId, $timestamp, $this->ctxMode, $this->certificate);
+        $this->client = new LyraClient();
     }
 
-    public function genUuid()
-    {
-        if (function_exists('random_bytes')) {
-            // PHP 7
-            $data = random_bytes(16);
-        } else {
-            return sprintf(
-                '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-                mt_rand(0, 0xffff),
-                mt_rand(0, 0xffff),
-                mt_rand(0, 0xffff),
-                mt_rand(0, 0x0fff) | 0x4000,
-                mt_rand(0, 0x3fff) | 0x8000,
-                mt_rand(0, 0xffff),
-                mt_rand(0, 0xffff),
-                mt_rand(0, 0xffff)
-            );
-        }
-
-        $data[6] = chr(ord($data[6]) & 0x0f | 0x40); // set version to 100
-        $data[8] = chr(ord($data[8]) & 0x3f | 0x80); // set bits 6 & 7 to 10
-
-        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
-    }
-
-    public function generateToken(Subscription $subscription, $order = null)
-    {
-        $result = [];
-
-        if (is_null($order)) {
-            $order = $subscription->getOrderOrigin();
-        }
-
-        $customer = $order->getCustomer();
-        $payment = $order->getLastPayment();
-        $paymentDetail = $payment->getDetails();
-
-        $sogecommerceUuid = $paymentDetail['vads_trans_uuid'];
-        $expiryMonth = intval($paymentDetail['vads_expiry_month']);
-        $expiryYear = intval($paymentDetail['vads_expiry_year']);
-        $expiryDate = new DateTime();
-        $expiryDate->setTime(0, 0, 0);
-        $expiryDate->setDate($expiryYear, $expiryMonth, 1);
-
-        $commonRequest = new commonRequest();
-        $commonRequest->submissionDate = $order->getCreatedAt();
-
-        $queryRequest = new queryRequest();
-        $queryRequest->uuid = $sogecommerceUuid;
-
-        $cardRequest = new cardRequest();
-        $cardRequest->paymentToken = 'subscription_' . $subscription->getId() . '_' . uniqid();
-
-        $billingDetailsRequest = new billingDetailsRequest();
-        $billingDetailsRequest->email = $customer->getEmail();
-        $billingDetailsRequest->firstName = $customer->getFirstName();
-        $customerRequest = new customerRequest();
-        $customerRequest->billingDetails = $billingDetailsRequest;
-
-        $createTokenRequest = new createTokenFromTransaction();
-        $createTokenRequest->commonRequest = $commonRequest;
-        $createTokenRequest->queryRequest = $queryRequest;
-        $createTokenRequest->cardRequest = $cardRequest;
-        $createTokenRequest->customerRequest = $customerRequest;
-
-        $createTokenRequest->commonRequest->submissionDate = $createTokenRequest->commonRequest->submissionDate->format(\DateTime::W3C);
-
-
-        $message = '';
-        $responseCode = null;
-        $success = 0;
-        $paymentToken = '';
-        $createTokenResponse = null;
-
-        //Appel de l'opération createToken
-        try {
-            $createTokenResponse = $this->client->createTokenFromTransaction($createTokenRequest);
-        } catch (SoapFault $fault) {
-            //Gestion des exceptions
-            trigger_error("SOAP Fault: (faultcode: {$fault->faultcode}, faultstring: {$fault->faultstring})", E_USER_ERROR);
-        }
-
-        //Analyse de la réponse
-        //Récupération du SOAP Header de la réponse afin de stocker les en-têtes dans un tableau (ici $responseHeader)
-        $dom = new DOMDocument;
-        $dom->loadXML($this->client->__getLastResponse(), LIBXML_NOWARNING);
-        $path = new DOMXPath($dom);
-        $headers = $path->query('//*[local-name()="Header"]/*');
-        $responseHeader = array();
-        foreach ($headers as $headerItem) {
-            $responseHeader[$headerItem->nodeName] = $headerItem->nodeValue;
-        }
-
-        // Calcul du jeton d'authentification de la réponse
-        $authTokenResponse = base64_encode(hash_hmac('sha256', $responseHeader['timestamp'] . $responseHeader['requestId'], $this->certificate, true));
-
-        if ($authTokenResponse !== $responseHeader['authToken']) {
-            // Erreur de calcul ou tentative de fraude
-            $success = 0;
-            $message = 'Erreur interne rencontrée';
-        } else {
-            $responseCode = $createTokenResponse->createTokenFromTransactionResult->commonResponse->responseCode;
-
-            if ($responseCode != "0") {
-                $success = 0;
-                $message = $this->getCodeDetail($responseCode);
-            } else {
-                $success = 1;
-                $paymentToken = $createTokenResponse->createTokenFromTransactionResult->commonResponse->paymentToken;
-
-                $message = $createTokenResponse->createTokenFromTransactionResult->commonResponse->responseCodeDetail . '(' . $paymentToken . ')';
-            }
-        }
-
-        $result['success'] = $success;
-        $result['response_code'] = $responseCode;
-        $result['message'] = $message;
-        $result['payment_token'] = $paymentToken;
-        $result['expiry_date'] = $expiryDate;
-
-        return $result;
-    }
-
-    public function getAuthToken($requestId, $timestamp, $key)
-    {
-        $data = "";
-        $data = $requestId . $timestamp;
-        $authToken = hash_hmac("sha256", $data, $key, true);
-        $authToken = base64_encode($authToken);
-
-        return $authToken;
-    }
-
-    public function setHeaders($siteId, $requestId, $timestamp, $mode, $key)
-    {
-        // Création des en-têtes shopId, requestId, timestamp, mode et authToken
-        $ns = 'http://v5.ws.vads.lyra.com/Header/';
-        $headerShopId = new SoapHeader($ns, 'shopId', $siteId);
-        $headerRequestId = new SoapHeader($ns, 'requestId', $requestId);
-        $headerTimestamp = new SoapHeader($ns, 'timestamp', $timestamp);
-        $headerMode = new SoapHeader($ns, 'mode', $mode);
-        $authToken = $this->getAuthToken($requestId, $timestamp, $key);
-
-        $headerAuthToken = new SoapHeader($ns, 'authToken', $authToken);
-        // Ajout des en-têtes dans le SOAP Header
-        $headers = array(
-            $headerShopId,
-            $headerRequestId,
-            $headerTimestamp,
-            $headerMode,
-            $headerAuthToken
-        );
-
-        $this->client->__setSoapHeaders($headers);
-    }
 
     public function getCodeDetail($code)
     {
         $codeDetail = [
-            "0" => "Action réalisée avec succès",
-            "1" => "Action non autorisée.",
-            "2" => "Attribut invalide.",
-            "3" => "La requête n'a pu être traitée.",
-            "10" => "Transaction non trouvée.",
-            "11" => "Statut de la transaction incorrect.",
-            "12" => "Transaction existe déjà.",
-            "13" => "Mauvaise date (la valeur de l'attribut 'submissionDate' est trop loin de la date actuelle).",
-            "14" => "Aucun changement.",
-            "15" => "Trop de résultats.",
-            "20" => "Montant invalide dans l'attribut 'amount'.",
-            "21" => "Devise invalide dans l'attribut 'currency'.",
-            "22" => "Type de carte inconnu.",
-            "23" => "Date invalide dans les attributs 'expiryMonth' et/ou 'expiryYear'.",
-            "24" => "Le 'cvv' est obligatoire.",
-            "25" => "Numéro de contrat inconnu.",
-            "26" => "Le numéro de carte est invalide.",
-            "30" => "L'alias n'est pas trouvé.",
-            "31" => "L'alias est invalide (Résilié, vide…).",
-            "32" => "Attribut 'subscriptionId' non trouvé.",
-            "33" => "Attribut 'rrule' invalide",
-            "34" => "L'alias existe déjà.",
-            "35" => "Création de l'alias refusé.",
-            "36" => "Attribut 'paymentToken' purgé.",
-            "40" => "Attribut 'amount' non autorisé",
-            "41" => "Plage de carte non trouvée",
-            "42" => "Le solde du moyen de paiement n'est pas suffisant.",
-            "43" => "Le remboursement n'est pas autorisé pour ce contrat.",
-            "50" => "Aucune brand localisée.",
-            "51" => "Marchand non enrôlé.",
-            "52" => "Signature de l'ACS invalide.",
-            "53" => "Erreur technique 3DS.",
-            "54" => "Paramètre 3DS incorrect.",
-            "55" => "3DS désactivé.",
-            "56" => "PAN non trouvé.",
-            "97" => "OneyWs Erreur.",
-            "98" => "Attribut RequestId invalide.",
-            "99" => "Erreur inconnue."
+            '0' => 'Action réalisée avec succès',
+            '1' => 'Action non autorisée.',
+            '2' => 'Attribut invalide.',
+            '3' => 'La requête n\'a pu être traitée.',
+            '10' => 'Transaction non trouvée.',
+            '11' => 'Statut de la transaction incorrect.',
+            '12' => 'Transaction existe déjà.',
+            '13' => 'Mauvaise date (la valeur de l\'attribut \'submissionDate\' est trop loin de la date actuelle).',
+            '14' => 'Aucun changement.',
+            '15' => 'Trop de résultats.',
+            '20' => 'Montant invalide dans l\'attribut \'amount\'.',
+            '21' => 'Devise invalide dans l\'attribut \'currency\'.',
+            '22' => 'Type de carte inconnu.',
+            '23' => 'Date invalide dans les attributs \'expiryMonth\' et/ou \'expiryYear\'.',
+            '24' => 'Le \'cvv\' est obligatoire.',
+            '25' => 'Numéro de contrat inconnu.',
+            '26' => 'Le numéro de carte est invalide.',
+            '30' => 'L\'alias n\'est pas trouvé.',
+            '31' => 'L\'alias est invalide (Résilié, vide…).',
+            '32' => 'Attribut \'subscriptionId\' non trouvé.',
+            '33' => 'Attribut \'rrule\' invalide',
+            '34' => 'L\'alias existe déjà.',
+            '35' => 'Création de l\'alias refusé.',
+            '36' => 'Attribut \'paymentToken\' purgé.',
+            '40' => 'Attribut \'amount\' non autorisé',
+            '41' => 'Plage de carte non trouvée',
+            '42' => 'Le solde du moyen de paiement n\'est pas suffisant.',
+            '43' => 'Le remboursement n\'est pas autorisé pour ce contrat.',
+            '50' => 'Aucune brand localisée.',
+            '51' => 'Marchand non enrôlé.',
+            '52' => 'Signature de l\'ACS invalide.',
+            '53' => 'Erreur technique 3DS.',
+            '54' => 'Paramètre 3DS incorrect.',
+            '55' => '3DS désactivé.',
+            '56' => 'PAN non trouvé.',
+            '97' => 'OneyWs Erreur.',
+            '98' => 'Attribut RequestId invalide.',
+            '99' => 'Erreur inconnue.'
         ];
 
         return $codeDetail[$code];
@@ -398,57 +276,5 @@ class PayzenClient
         ];
 
         return $codeDetail[$code];
-    }
-
-    /**
-     * Prépare les différents objets nécessaires pour utiliser l'api payzen (sogecommerce)
-     *
-     * @return array
-     */
-    public function processPayment(SubscriptionDraftOrder $order)
-    {
-        $subscription = $order->getSubscription();
-
-        if (is_null($subscription)) {
-            return [
-                'success' => false,
-                'message' => 'Aucun abonnement associé à la commande'
-            ];
-        }
-
-        $customer = $order->getCustomer();
-
-        $amount = $order->getTotal();
-
-        $commonRequest = new commonRequest();
-        $commonRequest->submissionDate = new DateTime('now');
-
-        $paymentRequest = new paymentRequest();
-        $paymentRequest->amount = $amount;
-        $paymentRequest->currency = 978;
-
-        $orderRequest = new orderRequest();
-        $orderRequest->orderId = $order->getNumber();
-
-        $cardRequest = new cardRequest();
-        $cardRequest->paymentToken = $subscription->getCardToken();
-
-        $billingDetails = new billingDetailsRequest();
-        $billingDetails->email = $customer->getEmail();
-        $billingDetails->firstName = $customer->getFirstName();
-        $billingDetails->lastName = $customer->getLastName();
-
-        $customerRequest = new customerRequest;
-        $customerRequest->billingDetails = $billingDetails;
-
-        $createPayment = new createPayment;
-        $createPayment->paymentRequest = $paymentRequest;
-        $createPayment->orderRequest = $orderRequest;
-        $createPayment->cardRequest = $cardRequest;
-        $createPayment->customerRequest = $customerRequest;
-
-        $payment_result = $this->createPayment($createPayment);
-
-        return $payment_result;
     }
 }

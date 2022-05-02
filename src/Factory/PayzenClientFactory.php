@@ -24,12 +24,11 @@ final class PayzenClientFactory
 
         $config = $payzenPaymentMethod->getGatewayConfig()->getConfig();
 
-        $wsdl = $config['webservice_endpoint'];
-        $siteId = $config['site_id'];
-        $certificate = $config['certificate'];
-        $ctxMode = $config['ctx_mode'];
+        $username = $config['site_id'];
+        $password = $config['rest_password'];
+        $endpoint = $config['rest_endpoint'];
 
-        $client = new PayzenClient($wsdl, $siteId, $certificate, $ctxMode);
+        $client = new PayzenClient($username, $password, $endpoint);
 
         $client->init();
 
