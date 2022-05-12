@@ -240,6 +240,7 @@ final class IpnController
         if (array_key_exists('transactions', $formAnswer)) {
             $transaction = current($formAnswer['transactions']);
             $details['vads_trans_uuid'] = $transaction['uuid'];
+            $details['vads_identifier'] = $transaction['paymentMethodToken'];
 
             if (array_key_exists('transactionDetails', $transaction)) {
                 $transactionDetails = $transaction['transactionDetails'];

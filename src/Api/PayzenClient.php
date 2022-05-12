@@ -30,52 +30,6 @@ class PayzenClient
         $this->endpoint = $endpoint;
     }
 
-
-    public function generateAlias(Order $order)
-    {
-        $result = [];
-
-        $payment = $order->getLastPayment();
-        $paymentDetail = $payment->getDetails();
-
-        $transactionUuid = $paymentDetail['vads_trans_uuid'];
-
-        $params = [
-            'uuid' => $transactionUuid,
-        ];
-
-        $response = $this->client->post('V4/Charge/CreateTokenFromTransaction', $params);
-
-        if ($response['status'] !== 'SUCCESS') {
-            return [
-                'error' => $response['answer']['errorMessage'],
-                'formToken' => false,
-                'message' => false,
-                'expiry_date' => false,
-                'success' => false,
-            ];
-        }
-
-        $answer = $response['answer'];
-        $tokenDetails = $answer['tokenDetails'];
-        $expiryMonth = $tokenDetails['expiryMonth'];
-        $expiryYear = $tokenDetails['expiryYear'];
-        $expiryDate = new \DateTime();
-        $expiryDate->setTime(0, 0, 0);
-        $expiryDate->setDate($expiryYear, $expiryMonth, 1);
-        $responseCode = intval($tokenDetails['authorizationResponse']['authorizationResult']);
-        $message = $this->getCodeDetail($responseCode);
-
-        return [
-            'response_code' => $responseCode,
-            'message' => $message,
-            'payment_token' => $answer['paymentMethodToken'],
-            'expiry_date' => $expiryDate,
-            'success' => true,
-        ];
-    }
-
-
     public function processPayment(SubscriptionDraftOrder $subscriptionDraftOrder)
     {
         $transactionCode = 99;
@@ -85,7 +39,7 @@ class PayzenClient
         $success = false;
 
         $subscription = $subscriptionDraftOrder->getSubscription();
-
+        $customer = $subscription->getCustomer();
         $payment = $subscriptionDraftOrder->getLastPayment();
 
         if (empty($payment) || $payment->getMethod()->getCode() !== 'PAYZEN') {
@@ -101,7 +55,7 @@ class PayzenClient
             'amount' => $subscriptionDraftOrder->getTotal(),
             'currency' => $subscriptionDraftOrder->getCurrencyCode(),
             'customer' => [
-                'email' => 'leo@antilop.fr'
+                'email' => $customer->getEmail()
             ],
             'paymentMethodToken' => $token,
             'formAction' => 'SILENT'
@@ -271,8 +225,7 @@ class PayzenClient
             '96' => 'Mauvais fonctionnement du système',
             '97' => 'Échéance de la temporisation de surveillance globale',
             '98' => 'Serveur indisponible routage réseau demandé à nouveau',
-            '99' => 'Incident domaine initiateur',
-
+            '99' => 'Incident domaine initiateur'
         ];
 
         return $codeDetail[$code];
