@@ -90,7 +90,6 @@ class Api
         $data = $this
             ->getRequestOptionsResolver()
             ->resolve(array_replace($data, [
-                'vads_page_action' => 'PAYMENT',
                 'vads_version'     => 'V2',
             ]));
 
@@ -362,7 +361,7 @@ class Api
             ->setAllowedValues('vads_action_mode', ['SILENT', 'INTERACTIVE'])
             ->setAllowedValues('vads_currency', $this->getCurrencyCodes())
             ->setAllowedValues('vads_language', $this->getLanguageCodes())
-            ->setAllowedValues('vads_page_action', 'PAYMENT')
+            ->setAllowedValues('vads_page_action', ['REGISTER_PAY', 'PAYMENT'])
             ->setAllowedValues('vads_payment_cards', $this->getCardsCodes())
             ->setAllowedValues('vads_payment_config', function ($value) {
                 if ($value === 'SINGLE') {

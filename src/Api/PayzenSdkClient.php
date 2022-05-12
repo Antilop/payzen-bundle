@@ -2,6 +2,7 @@
 
 namespace Antilop\SyliusPayzenBundle\Api;
 
+use App\Entity\Order\Order;
 use Lyra\Client as LyraClient;
 use Payum\Core\Payum;
 use Sylius\Component\Core\Model\OrderInterface;
@@ -31,10 +32,10 @@ class PayzenSdkClient
     /**
      * Constructor
      *
-     * @param string $username
-     * @param string $password
-     * @param string $endpoint
-     * @param Payum $payum
+     * @param string           $username
+     * @param string           $password
+     * @param string           $endpoint
+     * @param Payum            $payum
      * @param FactoryInterface $factory
      */
     public function __construct($username, $password, $endpoint, $payum, $factory)
@@ -100,7 +101,7 @@ class PayzenSdkClient
     /**
      * Get parameters
      *
-     * @param OrderInterface $order
+     * @param Order $order
      * @param string         $action
      *
      * @return array
@@ -131,7 +132,7 @@ class PayzenSdkClient
         );
 
         $cartItems = [];
-        /** @var OrderItemInterface  $item */
+        /** @var OrderItemInterface $item */
         foreach ($order->getItems() as $item) {
             $cartItems[] = [
                 'productLabel' => $item->getProductName(),
@@ -145,10 +146,15 @@ class PayzenSdkClient
         $shoppingCart = [
             'cartItemInfo' => $cartItems
         ];
-        if($order->getTaxTotal()) $shoppingCart['taxAmount'] = $order->getTaxTotal();
-        if($order->getShippingTotal()) $shoppingCart['shippingAmount'] = $order->getShippingTotal();
+        if ($order->getTaxTotal()) {
+            $shoppingCart['taxAmount'] = $order->getTaxTotal();
+        }
+        if ($order->getShippingTotal()) {
+            $shoppingCart['shippingAmount'] = $order->getShippingTotal();
+        }
 
-        return [
+
+        $params = [
             'amount' => $order->getTotal(),
             'currency' => $order->getCurrencyCode(),
             'orderId' => $order->getNumber(),
@@ -180,6 +186,12 @@ class PayzenSdkClient
             'strongAuthentication' => 'DISABLED',
             'ipnTargetUrl' => $captureToken->getTargetUrl()
         ];
+
+        if ($action === 'CreatePayment' && $order->hasItemsSubscribable()) {
+            $params['formAction'] = 'REGISTER_PAY';
+        }
+
+        return $params;
     }
 
     /**
