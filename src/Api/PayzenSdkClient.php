@@ -2,6 +2,7 @@
 
 namespace Antilop\SyliusPayzenBundle\Api;
 
+use App\Entity\Order\Order;
 use Lyra\Client as LyraClient;
 use Payum\Core\Payum;
 use Sylius\Component\Core\Model\OrderInterface;
@@ -100,7 +101,7 @@ class PayzenSdkClient
     /**
      * Get parameters
      *
-     * @param OrderInterface $order
+     * @param Order $order
      * @param string         $action
      *
      * @return array
@@ -186,7 +187,7 @@ class PayzenSdkClient
             'ipnTargetUrl' => $captureToken->getTargetUrl()
         ];
 
-        if ($action === 'CreatePayment') {
+        if ($action === 'CreatePayment' && $order->hasItemsSubscribable()) {
             $params['formAction'] = 'REGISTER_PAY';
         }
 

@@ -90,7 +90,6 @@ class Api
         $data = $this
             ->getRequestOptionsResolver()
             ->resolve(array_replace($data, [
-                'vads_page_action' => 'REGISTER_PAY',
                 'vads_version'     => 'V2',
             ]));
 
@@ -302,7 +301,7 @@ class Api
                 'vads_order_info'               => null,
                 'vads_order_info2'              => null,
                 'vads_order_info3'              => null,
-                'vads_page_action'              => 'REGISTER_PAY',
+                'vads_page_action'              => 'PAYMENT',
                 'vads_payment_cards'            => null, // Obligatoire si acquisition de la carte par commerçant
                 'vads_payment_config'           => 'SINGLE',
                 'vads_payment_src'              => null, // Obligatoire pour vente à distance
@@ -362,7 +361,7 @@ class Api
             ->setAllowedValues('vads_action_mode', ['SILENT', 'INTERACTIVE'])
             ->setAllowedValues('vads_currency', $this->getCurrencyCodes())
             ->setAllowedValues('vads_language', $this->getLanguageCodes())
-            ->setAllowedValues('vads_page_action', 'REGISTER_PAY')
+            ->setAllowedValues('vads_page_action', ['REGISTER_PAY', 'PAYMENT'])
             ->setAllowedValues('vads_payment_cards', $this->getCardsCodes())
             ->setAllowedValues('vads_payment_config', function ($value) {
                 if ($value === 'SINGLE') {

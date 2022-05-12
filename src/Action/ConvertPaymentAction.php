@@ -2,6 +2,7 @@
 
 namespace Antilop\SyliusPayzenBundle\Action;
 
+use App\Entity\Order\Order;
 use Payum\Core\Action\ActionInterface;
 use Payum\Core\Bridge\Spl\ArrayObject;
 use Payum\Core\Exception\RequestNotSupportedException;
@@ -32,6 +33,7 @@ class ConvertPaymentAction implements ActionInterface, GatewayAwareInterface
 
         /** @var PaymentInterface $payment */
         $payment = $request->getSource();
+        /** @var Order $order */
         $order = $payment->getOrder();
         $gatewayConfig = $payment->getMethod()->getGatewayConfig()->getConfig();
 
@@ -65,6 +67,10 @@ class ConvertPaymentAction implements ActionInterface, GatewayAwareInterface
                 $first = round($model['vads_amount'] / $count);
                 $model['vads_payment_config'] = sprintf('MULTI:first=%d;count=%d;period=%d', $first, $count, $period);
             }
+        }
+
+        if ($order->hasItemsSubscribable()) {
+            $model['vads_page_action'] = 'REGISTER_PAY';
         }
 
         $request->setResult((array)$model);
