@@ -54,6 +54,7 @@ class PayzenClient
         $params = [
             'amount' => $subscriptionDraftOrder->getTotal(),
             'currency' => $subscriptionDraftOrder->getCurrencyCode(),
+            'orderId' => $subscriptionDraftOrder->getNumber(),
             'customer' => [
                 'email' => $customer->getEmail()
             ],
