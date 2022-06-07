@@ -36,6 +36,7 @@ class PayzenClient
         $authorizationResultCode = 99;
         $timestamp = time();
         $transactionUuid = '';
+        $transactionId = '';
         $success = false;
 
         $subscription = $subscriptionDraftOrder->getSubscription();
@@ -93,6 +94,7 @@ class PayzenClient
                     $expiryMonth = $cardDetails['expiryMonth'];
                     $expiryYear = $cardDetails['expiryYear'];
                     $transactionUuid = $transaction['uuid'];
+                    $transactionId = $cardDetails['legacyTransId'];
 
                     $result['vads_card_number'] = $cardNumber;
                     $result['vads_expiry_month'] = $expiryMonth;
@@ -100,7 +102,6 @@ class PayzenClient
                     $result['vads_card_brand'] = $cardBrand;
                 }
             }
-
         }
 
         $message = $this->getCodeDetail($transactionCode) . ' (CODE:' . $transactionCode . ')';
@@ -109,7 +110,7 @@ class PayzenClient
         $result['success'] = $success;
         $result['response_code'] = $transactionCode;
         $result['message'] = $message;
-        $result['vads_trans_id'] = $transactionUuid;
+        $result['vads_trans_id'] = $transactionId;
         $result['vads_trans_uuid'] = $transactionUuid;
         $result['timestamp'] = $timestamp;
 
