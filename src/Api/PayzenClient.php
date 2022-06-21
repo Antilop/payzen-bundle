@@ -32,12 +32,13 @@ class PayzenClient
 
     public function processPayment(SubscriptionDraftOrder $subscriptionDraftOrder)
     {
-        $transactionCode = 99;
         $authorizationResultCode = 99;
-        $timestamp = time();
-        $transactionUuid = '';
-        $transactionId = '';
+        $result = [];
         $success = false;
+        $timestamp = time();
+        $transactionCode = 99;
+        $transactionId = '';
+        $transactionUuid = '';
 
         $subscription = $subscriptionDraftOrder->getSubscription();
         $customer = $subscription->getCustomer();
@@ -221,6 +222,10 @@ class PayzenClient
             '68' => 'Réponse non parvenue ou reçue trop tard',
             '75' => 'Nombre d’essais code confidentiel dépassé',
             '76' => 'Porteur déjà en opposition, ancien enregistrement conservé',
+            '80' => 'Le paiement sans contact n’est pas admis par l’émetteur',
+            '81' => 'Le paiement non sécurisé n’est pas admis par l’émetteur',
+            '82' => 'Révocation paiement récurrent pour la carte chez le commerçant ou pour le MCC et la carte',
+            '83' => 'Révocation tous paiements récurrents pour la carte',
             '90' => 'Arrêt momentané du système',
             '91' => 'Émetteur de cartes inaccessible',
             '94' => 'Transaction dupliquée',
@@ -229,6 +234,10 @@ class PayzenClient
             '98' => 'Serveur indisponible routage réseau demandé à nouveau',
             '99' => 'Incident domaine initiateur'
         ];
+
+        if (!array_key_exists($code, $codeDetail)) {
+            return 'Code d’erreur non répertorié';
+        }
 
         return $codeDetail[$code];
     }
