@@ -35,9 +35,11 @@ class UpdateBankDetailListener
         if ($paymentMethod->getCode() === 'PAYZEN') {
             /** @var SubscriptionDraftOrder $draftOrder */
             $draftOrder = $subscription->getDraftOrder();
-            if ($draftOrder->getState() === SubscriptionDraftOrder::STATE_DRAFT_PAYMENT_FAILED) {
+            if ($draftOrder->getState() === SubscriptionDraftOrder::STATE_DRAFT_PAYMENT_FAILED && !$subscription->hasSoldOutVariant()) {
                 $stateMachine = $this->stateMachineFactory->get($draftOrder, SubscriptionDraftOrderTransitions::GRAPH);
                 $stateMachine->apply(SubscriptionDraftOrderTransitions::TRANSITION_PROCESS_PAYMENT);
+            }else if($subscription->hasSoldOutVariant()){
+                if(!$subscription->setManual(true)) $subscription->setManual(true);
             }
         }
     }
