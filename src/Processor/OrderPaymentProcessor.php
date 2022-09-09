@@ -55,18 +55,6 @@ final class OrderPaymentProcessor implements OrderProcessorInterface
         Assert::isInstanceOf($order, \Sylius\Component\Core\Model\OrderInterface::class);
 
         if ($order instanceof SubscriptionDraftOrder) {
-            if (0 === $order->getTotal()) {
-                $removablePayments = $order->getPayments()->filter(function (PaymentInterface $payment): bool {
-                    return $payment->getState() === OrderPaymentStates::STATE_CART;
-                });
-
-                foreach ($removablePayments as $payment) {
-                    $order->removePayment($payment);
-                }
-
-                return;
-            }
-
             $lastPayment = $order->getLastPayment(PaymentInterface::STATE_NEW);
             if ($lastPayment !== null && $lastPayment->getMethod()->getCode() === 'PAYZEN') {
                 $payzenClient = $this->payzenClientFactory->create();
@@ -84,13 +72,6 @@ final class OrderPaymentProcessor implements OrderProcessorInterface
                     $newPayment = $this->orderPaymentProvider->provideOrderPayment($order, PaymentInterface::STATE_CART);
                     $order->addPayment($newPayment);
                 }
-            }
-
-            if ($lastPayment !== null) {
-                $lastPayment->setCurrencyCode($order->getCurrencyCode());
-                $lastPayment->setAmount($order->getTotal());
-
-                return;
             }
         }
 
