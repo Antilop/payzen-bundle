@@ -101,12 +101,12 @@ class PayzenSdkClient
     /**
      * Get parameters
      *
-     * @param Order $order
+     * @param OrderInterface $order
      * @param string         $action
      *
      * @return array
      */
-    protected function getParams(OrderInterface $order, $action)
+    protected function getParams(OrderInterface $order, string $action): array
     {
         $customer = $order->getCustomer();
         $shippingAddress = $order->getShippingAddress();
@@ -117,11 +117,6 @@ class PayzenSdkClient
         $ipnUrl = 'payzen_ipn_order_url';
         if ($action == 'CreateToken') {
             $ipnUrl = 'payzen_ipn_subscription_url';
-        } else {
-            $stateMachine = $this->factory->get($lastPayment, PaymentTransitions::GRAPH);
-            if ($stateMachine->can(PaymentTransitions::TRANSITION_CREATE)) {
-                $stateMachine->apply(PaymentTransitions::TRANSITION_CREATE);
-            }
         }
 
         $captureToken = $this->payum->getTokenFactory()->createToken(
@@ -190,6 +185,13 @@ class PayzenSdkClient
         if ($action === 'CreatePayment' && $order->hasItemsSubscribable()) {
             $params['formAction'] = 'REGISTER_PAY';
         }
+
+        // Add Metadata
+        $params['metadata'] = [
+            'order_id' => $order->getId(),
+            'payment_id' => $lastPayment->getId(),
+            'customer_id' => $customer->getId()
+        ];
 
         return $params;
     }

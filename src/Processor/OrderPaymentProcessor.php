@@ -11,8 +11,10 @@ use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Core\OrderPaymentStates;
-use Sylius\Component\Order\Model\OrderInterface;
+use Sylius\Component\Core\Model\OrderInterface;
+use Sylius\Component\Order\Model\OrderInterface as OrderInterfaceAlias;
 use Sylius\Component\Order\Processor\OrderProcessorInterface;
+use Sylius\Component\Payment\Model\PaymentInterface as PaymentInterfaceAlias;
 use Sylius\Component\Payment\PaymentTransitions;
 use Webmozart\Assert\Assert;
 use SM\Factory\FactoryInterface as StateMachineFactoryInterface;
@@ -50,12 +52,12 @@ final class OrderPaymentProcessor implements OrderProcessorInterface
         $stateMachine->apply($transition);
     }
 
-    public function process(OrderInterface $order): void
+    public function process(OrderInterfaceAlias $order): void
     {
-        Assert::isInstanceOf($order, \Sylius\Component\Core\Model\OrderInterface::class);
+        Assert::isInstanceOf($order, OrderInterface::class);
 
         if ($order instanceof SubscriptionDraftOrder) {
-            $lastPayment = $order->getLastPayment(PaymentInterface::STATE_NEW);
+            $lastPayment = $order->getLastPayment(PaymentInterfaceAlias::STATE_NEW);
             if ($lastPayment !== null && $lastPayment->getMethod()->getCode() === 'PAYZEN') {
                 $payzenClient = $this->payzenClientFactory->create();
                 $result = $payzenClient->processPayment($order);
@@ -85,6 +87,6 @@ final class OrderPaymentProcessor implements OrderProcessorInterface
         /** @var GatewayConfigInterface $gatewayConfig */
         $gatewayConfig = $paymentMethod->getGatewayConfig();
 
-        return (string) $gatewayConfig->getFactoryName();
+        return $gatewayConfig->getFactoryName();
     }
 }
