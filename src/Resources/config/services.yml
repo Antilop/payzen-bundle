@@ -35,6 +35,7 @@ services:
         arguments:
             - '@payum'
             - '@sylius.repository.order'
+            - '@sylius.repository.payment'
             - '@antilop.payment.payzen.sdk.factory'
             - '@sm.factory'
             - '@app.service.subscription'

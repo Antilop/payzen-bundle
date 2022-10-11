@@ -4,6 +4,7 @@ namespace Antilop\SyliusPayzenBundle\Controller;
 
 use Antilop\SyliusPayzenBundle\Factory\PayzenSdkClientFactory;
 use App\Entity\Subscription\Subscription;
+use App\Entity\Subscription\SubscriptionDraftOrder;
 use App\Entity\Subscription\SubscriptionState;
 use App\Service\SubscriptionService;
 use App\StateMachine\OrderCheckoutStates;
@@ -11,28 +12,33 @@ use Doctrine\ORM\EntityManager;
 use Payum\Core\Payum;
 use SM\Factory\FactoryInterface;
 use Sylius\Component\Core\Model\OrderInterface;
+use Sylius\Component\Core\Repository\PaymentRepositoryInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderCheckoutTransitions;
 use Sylius\Component\Core\Payment\Provider\OrderPaymentProviderInterface;
 use Sylius\Component\Order\Repository\OrderRepositoryInterface;
 use Sylius\Component\Order\StateResolver\StateResolverInterface;
+use Sylius\Component\Payment\Model\PaymentInterface as PaymentInterfaceAlias;
 use Sylius\Component\Payment\PaymentTransitions;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\PropertyAccess\PropertyAccess;
+use Symfony\Component\PropertyAccess\PropertyAccessor;
+use Webmozart\Assert\Assert;
 
 final class IpnController
 {
-    const OPERATION_TYPE_VERIFICATION = 'VERIFICATION';
-    const OPERATION_TYPE_DEBIT = 'DEBIT';
-
     /** @var Payum */
     protected $payum;
 
     /** @var OrderRepositoryInterface */
     protected $orderRepository;
 
-    /** @var PayzenSdkClient */
+    /** @var PaymentRepositoryInterface */
+    protected $paymentRepository;
+
+    /** @var PayzenSdkClientFactory */
     protected $payzenSdkClientFactory;
 
     /** @var FactoryInterface */
@@ -50,36 +56,34 @@ final class IpnController
     /** @var StateResolverInterface */
     private $orderPaymentStateResolver;
 
+    /** @var PropertyAccessor */
+    private $propertyAccessor;
+
     public function __construct(
-        Payum                         $payum,
-        OrderRepositoryInterface      $orderRepository,
-        PayzenSdkClientFactory        $payzenSdkClientFactory,
-        FactoryInterface              $factory,
-        SubscriptionService           $subscriptionService,
-        EntityManager                 $em,
+        Payum $payum,
+        OrderRepositoryInterface $orderRepository,
+        PaymentRepositoryInterface $paymentRepository,
+        PayzenSdkClientFactory $payzenSdkClientFactory,
+        FactoryInterface $factory,
+        SubscriptionService $subscriptionService,
+        EntityManager $em,
         OrderPaymentProviderInterface $orderPaymentProvider,
-        StateResolverInterface        $orderPaymentStateResolver
-    )
-    {
+        StateResolverInterface $orderPaymentStateResolver
+    ) {
         $this->payum = $payum;
         $this->orderRepository = $orderRepository;
+        $this->paymentRepository = $paymentRepository;
         $this->payzenSdkClientFactory = $payzenSdkClientFactory;
         $this->factory = $factory;
         $this->subscriptionService = $subscriptionService;
         $this->em = $em;
         $this->orderPaymentProvider = $orderPaymentProvider;
         $this->orderPaymentStateResolver = $orderPaymentStateResolver;
+        $this->propertyAccessor = PropertyAccess::createPropertyAccessor();
     }
 
-    public function completeOrderAction(Request $request, $orderId): Response
+    public function completeOrderAction(Request $request, string $orderId): Response
     {
-        /** @var OrderInterface|null $order */
-        $order = $this->orderRepository->findCartById($orderId);
-
-        if (null === $order) {
-            throw new NotFoundHttpException(sprintf('Order with id "%s" does not exist.', $orderId));
-        }
-
         $token = $this->payum->getHttpRequestVerifier()->verify($request);
         if (empty($token)) {
             throw new NotFoundHttpException(sprintf('Invalid security token for order with id "%s".', $orderId));
@@ -87,161 +91,213 @@ final class IpnController
 
         $payzenClient = $this->payzenSdkClientFactory->create();
         if (!$payzenClient->checkSignature()) {
-            throw new NotFoundHttpException(sprintf('Invalid signature for Order "%s".', $order->getId()));
+            throw new NotFoundHttpException(sprintf('Invalid signature for Order "%s".', $orderId));
         }
 
         $rawAnswer = $payzenClient->getFormAnswer();
         if (!empty($rawAnswer)) {
             $formAnswer = $rawAnswer['kr-answer'];
             $orderStatus = $formAnswer['orderStatus'];
+            Assert::inArray($orderStatus, ['PAID', 'UNPAID']);
 
-            /** @var PaymentInterface $payment */
-            $payment = $order->getLastPayment(PaymentInterface::STATE_NEW);
-            if ($orderStatus === 'PAID' && !empty($payment)) {
+            /** @var OrderInterface|null $order */
+            $order = $this->getOrder($rawAnswer, $orderId);
+            Assert::notNull($order, sprintf('Order with id "%s" does not exist.', $orderId));
 
-                $payzenTotal = (int)$formAnswer['orderDetails']['orderTotalAmount'];
-                if ($payzenTotal != $order->getTotal()) {
-                    $payment->setAmount($payzenTotal);
-                    $this->orderPaymentStateResolver->resolve($order);
-                }
+            /** @var PaymentInterface|null $payment */
+            $payment = $this->getPayment($rawAnswer, $order);
+            Assert::notNull($payment);
 
-                $this->markComplete($payment);
-
-                $stateMachine = $this->factory->get($order, OrderCheckoutTransitions::GRAPH);
-                $stateMachine->apply(OrderCheckoutTransitions::TRANSITION_COMPLETE);
-
-                $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
-                $payment->setDetails($paymentDetails);
-
-                $this->em->persist($payment);
-                $this->em->persist($order);
-                $this->em->flush();
-
-                return new Response('SUCCESS');
+            $paymentSM = $this->factory->get($payment, PaymentTransitions::GRAPH);
+            if ($paymentSM->can(PaymentTransitions::TRANSITION_CREATE)) {
+                $paymentSM->apply(PaymentTransitions::TRANSITION_CREATE);
             }
 
-            if ($orderStatus === 'UNPAID' && !empty($payment)) {
-                $this->markFailed($payment, $order);
-                $this->em->persist($payment);
-                $this->em->flush();
-
-                return new Response('FAIL');
-            }
-        }
-
-        $this->payum->getHttpRequestVerifier()->invalidate($token);
-
-        return new Response('Invalid form answer from payzen');
-    }
-
-    public function updateSubscriptionBankDetailsAction(Request $request, $orderId): Response
-    {
-        /** @var SubscriptionDraftOrder|null $order */
-        $order = $this->orderRepository->findOneBy([
-            'id' => $orderId,
-            'checkoutState' => OrderCheckoutStates::STATE_DRAFT
-        ]);
-
-        if (null === $order) {
-            throw new NotFoundHttpException(sprintf('Order with id "%s" does not exist.', $orderId));
-        }
-
-        $payzenClient = $this->payzenSdkClientFactory->create();
-        if (!$payzenClient->checkSignature()) {
-            throw new NotFoundHttpException(sprintf('Invalid signature for Order "%s".', $order->getId()));
-        }
-
-        $token = $this->payum->getHttpRequestVerifier()->verify($request);
-        if (empty($token)) {
-            throw new NotFoundHttpException(sprintf('Invalid security token for order with id "%s".', $orderId));
-        }
-
-        $rawAnswer = $payzenClient->getFormAnswer();
-        if (!empty($rawAnswer)) {
-            /** @var Subscription $subscription */
-            $subscription = $order->getSubscription();
-
-            $formAnswer = $rawAnswer['kr-answer'];
-            $orderStatus = $formAnswer['orderStatus'];
-
-            if ($orderStatus === 'PAID') {
-                $expiryMonth = 0;
-                $expiryYear = 0;
-                $cardToken = '';
-
-                if (array_key_exists('transactions', $formAnswer)) {
-                    $transaction = current($formAnswer['transactions']);
-                    $cardToken = $transaction['paymentMethodToken'];
-
-                    if (array_key_exists('transactionDetails', $transaction)) {
-                        $transactionDetails = $transaction['transactionDetails'];
-                        $expiryMonth = $transactionDetails['cardDetails']['expiryMonth'];
-                        $expiryYear = $transactionDetails['cardDetails']['expiryYear'];
+            $content = null;
+            switch ($orderStatus) {
+                case 'PAID':
+                    $payzenTotal = (int)$formAnswer['orderDetails']['orderTotalAmount'];
+                    if ($payzenTotal != $order->getTotal()) {
+                        $payment->setAmount($payzenTotal);
+                        $this->orderPaymentStateResolver->resolve($order);
                     }
-                }
 
-                if (!empty($subscription) && !empty($expiryMonth) && !empty($expiryYear) && !empty($cardToken)) {
-                    $this->subscriptionService->updateCard(
-                        $subscription,
-                        intval($expiryMonth),
-                        intval($expiryYear),
-                        $cardToken
-                    );
+                    $this->markComplete($payment);
 
-                    $this->em->persist($subscription);
-                }
+                    $stateMachine = $this->factory->get($order, OrderCheckoutTransitions::GRAPH);
+                    if ($stateMachine->can(OrderCheckoutTransitions::TRANSITION_COMPLETE)) {
+                        $stateMachine->apply(OrderCheckoutTransitions::TRANSITION_COMPLETE);
+                    }
 
-                $this->em->flush();
+                    $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
+                    $payment->setDetails($paymentDetails);
 
-                return new Response('SUCCESS');
+                    $content = 'SUCCESS';
+                    break;
+                case 'UNPAID':
+                    $this->markFailed($payment);
+
+                    $content = 'FAIL';
+                    break;
             }
 
-            if ($orderStatus === 'UNPAID') {
-                return new Response('FAIL');
-            }
+            $this->em->flush();
+
+            return new Response($content);
         }
 
         $this->payum->getHttpRequestVerifier()->invalidate($token);
-
         return new Response('Invalid form answer from payzen');
     }
 
-    protected function markComplete($payment)
+    public function updateSubscriptionBankDetailsAction(Request $request, string $orderId): Response
     {
-        if (empty($payment)) {
-            return false;
+        $token = $this->payum->getHttpRequestVerifier()->verify($request);
+        if (empty($token)) {
+            throw new NotFoundHttpException(sprintf('Invalid security token for order with id "%s".', $orderId));
         }
 
-        $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
-        $stateMachine->apply(PaymentTransitions::TRANSITION_PROCESS);
+        $payzenClient = $this->payzenSdkClientFactory->create();
+        if (!$payzenClient->checkSignature()) {
+            throw new NotFoundHttpException(sprintf('Invalid signature for Order "%s".', $orderId));
+        }
 
-        $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
-        $stateMachine->apply(PaymentTransitions::TRANSITION_COMPLETE);
+        $rawAnswer = $payzenClient->getFormAnswer();
+        if (!empty($rawAnswer)) {
+            $formAnswer = $rawAnswer['kr-answer'];
+            $orderStatus = $formAnswer['orderStatus'];
+            Assert::inArray($orderStatus, ['PAID', 'UNPAID']);
 
-        return true;
+            /** @var SubscriptionDraftOrder|null $order */
+            $order = $this->getOrder($rawAnswer, $orderId, OrderCheckoutStates::STATE_DRAFT);
+            Assert::notNull($order, sprintf('Order with id "%s" not found', $orderId));
+
+            /** @var Subscription|null $subscription */
+            $subscription = $order->getSubscription();
+            Assert::notNull($subscription, sprintf('Subscription for draftOrder id "%s" not found.', $orderId));
+
+            $content = null;
+            switch ($orderStatus) {
+                case 'PAID':
+                    $expiryMonth = 0;
+                    $expiryYear = 0;
+                    $cardToken = '';
+
+                    if (array_key_exists('transactions', $formAnswer)) {
+                        $transaction = current($formAnswer['transactions']);
+                        $cardToken = $transaction['paymentMethodToken'];
+
+                        if (array_key_exists('transactionDetails', $transaction)) {
+                            $transactionDetails = $transaction['transactionDetails'];
+                            $expiryMonth = $transactionDetails['cardDetails']['expiryMonth'];
+                            $expiryYear = $transactionDetails['cardDetails']['expiryYear'];
+                        }
+                    }
+
+                    if (!empty($expiryMonth) && !empty($expiryYear) && !empty($cardToken)) {
+                        $this->subscriptionService->updateCard(
+                            $subscription,
+                            intval($expiryMonth),
+                            intval($expiryYear),
+                            $cardToken
+                        );
+                    }
+
+                    $content = 'SUCCESS';
+                    break;
+                case 'UNPAID':
+                    $content = 'FAIL';
+                    break;
+            }
+
+            $this->em->flush();
+            return new Response($content);
+        }
+
+        $this->payum->getHttpRequestVerifier()->invalidate($token);
+        return new Response('Invalid form answer from payzen');
     }
 
-    protected function markFailed($payment, $order)
+    /**
+     * @param array $rawAnswer
+     * @param string $orderId
+     * @param string|null $checkoutState
+     * @return OrderInterface|null
+     */
+    private function getOrder(array $rawAnswer, string $orderId, string $checkoutState = null): ?OrderInterface
     {
-        if (empty($payment)) {
-            return false;
+        // Fallback for previous Payzen Payment created without metadata
+        $criteria = ['id' => $orderId];
+
+        $orderIdMetadata = $this->propertyAccessor->getValue(
+            $rawAnswer,
+            '[kr-answer][transactions][0][metadata][order_id]'
+        );
+        if (!is_null($orderIdMetadata)) {
+            $criteria['id'] = $orderIdMetadata;
         }
 
-        $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
-        $stateMachine->apply(PaymentTransitions::TRANSITION_PROCESS);
-
-        $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
-        $stateMachine->apply(PaymentTransitions::TRANSITION_FAIL);
-
-        $newPayment = $this->orderPaymentProvider->provideOrderPayment($order, PaymentInterface::STATE_CART);
-        $order->addPayment($newPayment);
-
-        $stateMachine = $this->factory->get($newPayment, PaymentTransitions::GRAPH);
-        if ($stateMachine->can(PaymentTransitions::TRANSITION_CREATE)) {
-            $stateMachine->apply(PaymentTransitions::TRANSITION_CREATE);
+        if (!is_null($checkoutState)) {
+            $criteria['checkoutState'] = $checkoutState;
         }
 
-        return true;
+        return $this->orderRepository->findOneBy($criteria);
+    }
+
+    /**
+     * @param array $rawAnswer
+     * @param OrderInterface $order
+     * @return PaymentInterface|null
+     */
+    private function getPayment(array $rawAnswer, OrderInterface $order): ?PaymentInterface
+    {
+        $paymentIdMetadata = $this->propertyAccessor->getValue(
+            $rawAnswer,
+            '[kr-answer][transactions][0][metadata][payment_id]'
+        );
+
+        if (!is_null($paymentIdMetadata)) {
+            return $this->paymentRepository->findOneBy(['id' => $paymentIdMetadata]);
+        }
+
+        // Fallback for previous Payzen Payment created without metadata
+        return $order->getLastPayment(PaymentInterfaceAlias::STATE_NEW);
+    }
+
+    /**
+     * @param PaymentInterface $payment
+     * @return void
+     * @throws \SM\SMException
+     */
+    protected function markComplete(PaymentInterface $payment): void
+    {
+        $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
+
+        if ($stateMachine->can(PaymentTransitions::TRANSITION_PROCESS)) {
+            $stateMachine->apply(PaymentTransitions::TRANSITION_PROCESS);
+        }
+
+        if ($stateMachine->can(PaymentTransitions::TRANSITION_COMPLETE)) {
+            $stateMachine->apply(PaymentTransitions::TRANSITION_COMPLETE);
+        }
+    }
+
+    /**
+     * @param PaymentInterface $payment
+     * @return void
+     * @throws \SM\SMException
+     */
+    protected function markFailed(PaymentInterface $payment): void
+    {
+        $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
+
+        if ($stateMachine->can(PaymentTransitions::TRANSITION_PROCESS)) {
+            $stateMachine->apply(PaymentTransitions::TRANSITION_PROCESS);
+        }
+
+        if ($stateMachine->can(PaymentTransitions::TRANSITION_FAIL)) {
+            $stateMachine->apply(PaymentTransitions::TRANSITION_FAIL);
+        }
     }
 
     protected function makeUniformPaymentDetails($formAnswer)

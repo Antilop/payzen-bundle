@@ -64,6 +64,14 @@ class PayzenClient
             'formAction' => 'SILENT'
         ];
 
+        // Add Metadata
+        $params['metadata'] = [
+            'subscription_id' => $subscription->getId(),
+            'order_id' => $subscriptionDraftOrder->getId(),
+            'payment_id' => $payment->getId(),
+            'customer_id' => $customer->getId()
+        ];
+
         $response = $this->client->post('V4/Charge/CreatePayment', $params);
         $answer = $response['answer'];
 
