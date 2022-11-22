@@ -101,7 +101,7 @@ final class IpnController
             Assert::inArray($orderStatus, ['PAID', 'UNPAID']);
 
             /** @var OrderInterface|null $order */
-            $order = $this->getOrder($rawAnswer, $orderId);
+            $order = $this->orderRepository->find($orderId);
             Assert::notNull($order, sprintf('Order with id "%s" does not exist.', $orderId));
 
             /** @var PaymentInterface|null $payment */
@@ -169,48 +169,51 @@ final class IpnController
             Assert::inArray($orderStatus, ['PAID', 'UNPAID']);
 
             /** @var SubscriptionDraftOrder|null $order */
-            $order = $this->getOrder($rawAnswer, $orderId, OrderCheckoutStates::STATE_DRAFT);
+            $order = $this->orderRepository->find($orderId);
             Assert::notNull($order, sprintf('Order with id "%s" not found', $orderId));
 
-            /** @var Subscription|null $subscription */
-            $subscription = $order->getSubscription();
-            Assert::notNull($subscription, sprintf('Subscription for draftOrder id "%s" not found.', $orderId));
+            if ($order->getCheckoutState() === OrderCheckoutStates::STATE_DRAFT) {
+                /** @var Subscription|null $subscription */
+                $subscription = $order->getSubscription();
+                Assert::notNull($subscription, sprintf('Subscription for draftOrder id "%s" not found.', $orderId));
 
-            $content = null;
-            switch ($orderStatus) {
-                case 'PAID':
-                    $expiryMonth = 0;
-                    $expiryYear = 0;
-                    $cardToken = '';
+                $content = null;
+                switch ($orderStatus) {
+                    case 'PAID':
+                        $expiryMonth = 0;
+                        $expiryYear = 0;
+                        $cardToken = '';
 
-                    if (array_key_exists('transactions', $formAnswer)) {
-                        $transaction = current($formAnswer['transactions']);
-                        $cardToken = $transaction['paymentMethodToken'];
+                        if (array_key_exists('transactions', $formAnswer)) {
+                            $transaction = current($formAnswer['transactions']);
+                            $cardToken = $transaction['paymentMethodToken'];
 
-                        if (array_key_exists('transactionDetails', $transaction)) {
-                            $transactionDetails = $transaction['transactionDetails'];
-                            $expiryMonth = $transactionDetails['cardDetails']['expiryMonth'];
-                            $expiryYear = $transactionDetails['cardDetails']['expiryYear'];
+                            if (array_key_exists('transactionDetails', $transaction)) {
+                                $transactionDetails = $transaction['transactionDetails'];
+                                $expiryMonth = $transactionDetails['cardDetails']['expiryMonth'];
+                                $expiryYear = $transactionDetails['cardDetails']['expiryYear'];
+                            }
                         }
-                    }
 
-                    if (!empty($expiryMonth) && !empty($expiryYear) && !empty($cardToken)) {
-                        $this->subscriptionService->updateCard(
-                            $subscription,
-                            intval($expiryMonth),
-                            intval($expiryYear),
-                            $cardToken
-                        );
-                    }
+                        if (!empty($expiryMonth) && !empty($expiryYear) && !empty($cardToken)) {
+                            $this->subscriptionService->updateCard(
+                                $subscription,
+                                intval($expiryMonth),
+                                intval($expiryYear),
+                                $cardToken
+                            );
+                        }
 
-                    $content = 'SUCCESS';
-                    break;
-                case 'UNPAID':
-                    $content = 'FAIL';
-                    break;
+                        $content = 'SUCCESS';
+                        break;
+                    case 'UNPAID':
+                        $content = 'FAIL';
+                        break;
+                }
+
+                $this->em->flush();
             }
-
-            $this->em->flush();
+            
             return new Response($content);
         }
 
@@ -220,44 +223,21 @@ final class IpnController
 
     /**
      * @param array $rawAnswer
-     * @param string $orderId
-     * @param string|null $checkoutState
-     * @return OrderInterface|null
-     */
-    private function getOrder(array $rawAnswer, string $orderId, string $checkoutState = null): ?OrderInterface
-    {
-        // Fallback for previous Payzen Payment created without metadata
-        $criteria = ['id' => $orderId];
-
-        $orderIdMetadata = $this->propertyAccessor->getValue(
-            $rawAnswer,
-            '[kr-answer][transactions][0][metadata][order_id]'
-        );
-        if (!is_null($orderIdMetadata)) {
-            $criteria['id'] = $orderIdMetadata;
-        }
-
-        if (!is_null($checkoutState)) {
-            $criteria['checkoutState'] = $checkoutState;
-        }
-
-        return $this->orderRepository->findOneBy($criteria);
-    }
-
-    /**
-     * @param array $rawAnswer
      * @param OrderInterface $order
      * @return PaymentInterface|null
      */
     private function getPayment(array $rawAnswer, OrderInterface $order): ?PaymentInterface
     {
-        $paymentIdMetadata = $this->propertyAccessor->getValue(
-            $rawAnswer,
-            '[kr-answer][transactions][0][metadata][payment_id]'
-        );
+        if ($this->propertyAccessor->isReadable($rawAnswer, '[kr-answer][transactions][0][metadata][payment_id]')) {
+            $paymentIdMetadata = $this->propertyAccessor->getValue(
+                $rawAnswer,
+                '[kr-answer][transactions][0][metadata][payment_id]'
+            );
 
-        if (!is_null($paymentIdMetadata)) {
-            return $this->paymentRepository->findOneBy(['id' => $paymentIdMetadata]);
+
+            if (!is_null($paymentIdMetadata)) {
+                return $this->paymentRepository->findOneBy(['id' => $paymentIdMetadata]);
+            }
         }
 
         // Fallback for previous Payzen Payment created without metadata
