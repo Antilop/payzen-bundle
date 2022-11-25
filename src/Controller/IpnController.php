@@ -11,6 +11,7 @@ use App\StateMachine\OrderCheckoutStates;
 use Doctrine\ORM\EntityManager;
 use Payum\Core\Payum;
 use SM\Factory\FactoryInterface;
+use SM\StateMachine\StateMachineInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Repository\PaymentRepositoryInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
@@ -94,60 +95,71 @@ final class IpnController
             throw new NotFoundHttpException(sprintf('Invalid signature for Order "%s".', $orderId));
         }
 
+        /** @var OrderInterface|null $order */
+        $order = $this->orderRepository->find($orderId);
+        Assert::notNull($order, sprintf('Order with id "%s" does not exist.', $orderId));
+
         $rawAnswer = $payzenClient->getFormAnswer();
         if (!empty($rawAnswer)) {
             $formAnswer = $rawAnswer['kr-answer'];
             $orderStatus = $formAnswer['orderStatus'];
             Assert::inArray($orderStatus, ['PAID', 'UNPAID']);
 
-            /** @var OrderInterface|null $order */
-            $order = $this->orderRepository->find($orderId);
-            Assert::notNull($order, sprintf('Order with id "%s" does not exist.', $orderId));
-
             /** @var PaymentInterface|null $payment */
             $payment = $this->getPayment($rawAnswer, $order);
             Assert::notNull($payment);
 
+            // Check payment state & provide a new payment object if
             $paymentSM = $this->factory->get($payment, PaymentTransitions::GRAPH);
-            if ($paymentSM->can(PaymentTransitions::TRANSITION_CREATE)) {
+            if ($payment->getState() !== PaymentInterface::STATE_NEW) {
+                if (!$paymentSM->can(PaymentTransitions::TRANSITION_CREATE)) {
+                    $payment = $this->orderPaymentProvider->provideOrderPayment($order, PaymentInterface::STATE_CART);
+                    $paymentSM = $this->factory->get($payment, PaymentTransitions::GRAPH);
+
+                    $this->em->persist($payment);
+                }
+
                 $paymentSM->apply(PaymentTransitions::TRANSITION_CREATE);
             }
 
-            $content = null;
+            $payment->setDetails($this->makeUniformPaymentDetails($formAnswer));
+
+            $response = 'KO';
             switch ($orderStatus) {
                 case 'PAID':
-                    $payzenTotal = (int)$formAnswer['orderDetails']['orderTotalAmount'];
-                    if ($payzenTotal != $order->getTotal()) {
-                        $payment->setAmount($payzenTotal);
-                        $this->orderPaymentStateResolver->resolve($order);
-                    }
-
-                    $this->markComplete($payment);
-
-                    $stateMachine = $this->factory->get($order, OrderCheckoutTransitions::GRAPH);
-                    if ($stateMachine->can(OrderCheckoutTransitions::TRANSITION_COMPLETE)) {
-                        $stateMachine->apply(OrderCheckoutTransitions::TRANSITION_COMPLETE);
-                    }
-
-                    $paymentDetails = $this->makeUniformPaymentDetails($formAnswer);
-                    $payment->setDetails($paymentDetails);
-
-                    $content = 'SUCCESS';
+                    $response = $this->handlePaidResponse($order, $payment, $formAnswer, $paymentSM);
                     break;
                 case 'UNPAID':
-                    $this->markFailed($payment);
-
-                    $content = 'FAIL';
+                    $paymentSM->apply(PaymentTransitions::TRANSITION_FAIL);
+                    $response = 'SUCCESS';
                     break;
             }
 
             $this->em->flush();
 
-            return new Response($content);
+            return new Response($response);
         }
 
         $this->payum->getHttpRequestVerifier()->invalidate($token);
         return new Response('Invalid form answer from payzen');
+    }
+
+    private function handlePaidResponse(OrderInterface $order, PaymentInterface $payment, $formAnswer, StateMachineInterface $paymentStateMachine)
+    {
+        $payzenTotal = (int)$formAnswer['orderDetails']['orderTotalAmount'];
+        if ($payzenTotal != $order->getTotal()) {
+            $payment->setAmount($payzenTotal);
+            $this->orderPaymentStateResolver->resolve($order);
+        }
+
+        $paymentStateMachine->apply(PaymentTransitions::TRANSITION_COMPLETE);
+
+        $stateMachine = $this->factory->get($order, OrderCheckoutTransitions::GRAPH);
+        if ($stateMachine->can(OrderCheckoutTransitions::TRANSITION_COMPLETE)) {
+            $stateMachine->apply(OrderCheckoutTransitions::TRANSITION_COMPLETE);
+        }
+
+        return 'SUCCESS';
     }
 
     public function updateSubscriptionBankDetailsAction(Request $request, string $orderId): Response
@@ -249,24 +261,6 @@ final class IpnController
      * @return void
      * @throws \SM\SMException
      */
-    protected function markComplete(PaymentInterface $payment): void
-    {
-        $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
-
-        if ($stateMachine->can(PaymentTransitions::TRANSITION_PROCESS)) {
-            $stateMachine->apply(PaymentTransitions::TRANSITION_PROCESS);
-        }
-
-        if ($stateMachine->can(PaymentTransitions::TRANSITION_COMPLETE)) {
-            $stateMachine->apply(PaymentTransitions::TRANSITION_COMPLETE);
-        }
-    }
-
-    /**
-     * @param PaymentInterface $payment
-     * @return void
-     * @throws \SM\SMException
-     */
     protected function markFailed(PaymentInterface $payment): void
     {
         $stateMachine = $this->factory->get($payment, PaymentTransitions::GRAPH);
@@ -300,6 +294,8 @@ final class IpnController
                 $details['vads_trans_id'] = $transactionDetails['cardDetails']['legacyTransId'];
                 $details['vads_expiry_month'] = $transactionDetails['cardDetails']['expiryMonth'];
                 $details['vads_expiry_year'] = $transactionDetails['cardDetails']['expiryYear'];
+                $details['vads_cardEffectiveBrand'] = $transactionDetails['cardDetails']['effectiveBrand'];
+                $details['vads_pan'] = $transactionDetails['cardDetails']['pan'];
             }
         }
 
