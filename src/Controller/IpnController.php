@@ -113,10 +113,12 @@ final class IpnController
             $paymentSM = $this->factory->get($payment, PaymentTransitions::GRAPH);
             if ($payment->getState() !== PaymentInterface::STATE_NEW) {
                 if (!$paymentSM->can(PaymentTransitions::TRANSITION_CREATE)) {
-                    $payment = $this->orderPaymentProvider->provideOrderPayment($order, PaymentInterface::STATE_CART);
-                    $paymentSM = $this->factory->get($payment, PaymentTransitions::GRAPH);
-
+                    $order->addPayment(
+                        $payment = $this->orderPaymentProvider->provideOrderPayment($order, PaymentInterface::STATE_CART)
+                    );
                     $this->em->persist($payment);
+
+                    $paymentSM = $this->factory->get($payment, PaymentTransitions::GRAPH);
                 }
 
                 $paymentSM->apply(PaymentTransitions::TRANSITION_CREATE);
