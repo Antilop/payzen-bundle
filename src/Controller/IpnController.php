@@ -212,6 +212,7 @@ final class IpnController
                         if (!empty($expiryMonth) && !empty($expiryYear) && !empty($cardToken)) {
                             $this->subscriptionService->updateCard(
                                 $subscription,
+                                null,
                                 intval($expiryMonth),
                                 intval($expiryYear),
                                 $cardToken
