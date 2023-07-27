@@ -154,12 +154,12 @@ final class IpnController
             $this->orderPaymentStateResolver->resolve($order);
         }
 
-        $paymentStateMachine->apply(PaymentTransitions::TRANSITION_COMPLETE);
-
         $stateMachine = $this->factory->get($order, OrderCheckoutTransitions::GRAPH);
         if ($stateMachine->can(OrderCheckoutTransitions::TRANSITION_COMPLETE)) {
             $stateMachine->apply(OrderCheckoutTransitions::TRANSITION_COMPLETE);
         }
+
+        $paymentStateMachine->apply(PaymentTransitions::TRANSITION_COMPLETE);
 
         return 'SUCCESS';
     }
@@ -228,7 +228,7 @@ final class IpnController
 
                 $this->em->flush();
             }
-            
+
             return new Response($content);
         }
 
