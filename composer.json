@@ -23,9 +23,9 @@
     }
   ],
   "require": {
-    "php": ">=7.1",
-    "sylius/sylius": "^1.0",
-    "symfony/intl": "^4.4 || ^5.2",
+    "php": "^8.0",
+    "sylius/sylius": "^1.12",
+    "symfony/intl": "^5.4 || ^6.0",
     "lyracom/rest-php-sdk": "4.0.*"
   },
   "autoload": {
