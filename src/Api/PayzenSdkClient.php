@@ -178,7 +178,7 @@ class PayzenSdkClient
                 ],
                 'shoppingCart' => $shoppingCart
             ],
-            'strongAuthentication' => 'NO_PREFERENCE',
+            // 'strongAuthentication' => 'NO_PREFERENCE',
             'ipnTargetUrl' => $captureToken->getTargetUrl()
         ];
 
